@@ -6,48 +6,24 @@ from chem_lib.molecular_orbitals import MOSControl
 def apply_overlap_integral(a, b):
     """Apply integral result to exponents."""
     p = a+b
-    return numpy.pi**(3.0/2.0)/(8*numpy.sqrt(2.0)*p**(5.0/2.0))
+    # return numpy.pi**(3.0/2.0)/(p**(3.0/2.0))  # s orbitals
+    return numpy.pi**(3.0/2.0)/(2.0*p**(5.0/2.0))  # p orbitals
 
 
 def apply_operator_integral(a, b):
     p = a+b
-    return numpy.sqrt(2.0)/(6*numpy.sqrt(numpy.pi)*numpy.sqrt(p))
+    # return 4.0*numpy.pi/(2.0*p**2.0)  # s orbitals
+    return 4*numpy.pi/(3.0*p**3.0)  # p orbitals
 
 
-def get_C_A(basis_file_extract, basis_set):
-    """Retrieve coefficients and exponents from basis file."""
-    alpha_list=[]
-    coeff_list=[]
-
-    def extract_for_shell(basis_function_name):
-        sub_alpha_list = []
-        sub_coeff_list = []
-        for shell in basis_file_extract["$basis"][basis_set].keys():
-            if basis_function_name in shell:
-                a = basis_file_extract["$basis"][basis_set]
-                for exp in a[shell]:
-                    sub_alpha_list.append(exp["exponent"])
-                    sub_coeff_list.append(exp["coefficient"])
-        return sub_alpha_list, sub_coeff_list
-
-    p_alpha, p_coeff = extract_for_shell('p')
-    coeff_list.append(p_coeff)
-    alpha_list.append(p_alpha)
-
-    coeff_list = [item for sublist in coeff_list for item in sublist]
-    alpha_list = [item for sublist in alpha_list for item in sublist]
-
-    return coeff_list, alpha_list
-
-
-def compute_primary_matrix(alpha, operator=None):
+def compute_primary_matrix(alphas, operator=None, overlap=None):
     """Generate normalised overlap matrix."""
-    dim=len(alpha)
-    S = numpy.zeros([dim,dim])
+    dim = len(alphas)
+    S = numpy.zeros([dim, dim])
     for i in range(dim):
         for j in range(dim):
-            a=alpha[i]
-            b=alpha[j]
+            a = alphas[i]
+            b = alphas[j]
             if operator == 'r':
                 S[i, j] = apply_operator_integral(a, b)/numpy.sqrt(apply_overlap_integral(a, a)
                                                                    * apply_overlap_integral(b, b))
@@ -58,7 +34,6 @@ def compute_primary_matrix(alpha, operator=None):
 
 
 def contract_matrix(coeff_list, matrix):
-
     # decide the contraction ratios needed.
     coefficient_matrix = numpy.zeros([len(matrix), len(coeff_list)])
 
@@ -89,13 +64,25 @@ def normalise_contracted_matrix(contracted_overlap_matrix, contracted_operator_m
     return normalised_matrix
 
 
-def calculate_expected_r(basis_information, mos_information):
+def calculate_expected_r(basis_information, mos_information, basis_file_path='basis', mos_file_path='alpha'):
 
     # obtain information from basis file
     basis_file_extract = BasisControl()
-    coeff, alpha = get_C_A(basis_file_extract.basis_file, basis_information['basis_name'])
-    contracted_coefficients = basis_file_extract.extract_coefficients(basis_information['basis_name'],
-                                                                      basis_information['orbital_to_extract'])
+    basis_file_extract.variable_file_path = basis_file_path
+    basis_file_extract.read_variables()
+    coeff, alpha = basis_file_extract.get_coefficients_exponents(basis_file_extract.basis_file,
+                                                                 basis_information['basis_name'],
+                                                                 basis_information['orbital_to_extract'])
+    contracted_coefficients = basis_file_extract.extract_contracted_coefficients(
+        basis_information['basis_name'],
+        basis_information['orbital_to_extract'])
+
+    # obtain  information from mos file
+    moscontrol = MOSControl()
+    moscontrol.variable_file_path = mos_file_path
+    moscontrol.read_variables()
+    cmos = moscontrol.molecular_orbital_file[mos_information['orbital']][mos_information['coeff_range'][0]:
+    mos_information['coeff_range'][1]]
 
     # overlap and expectation matrices
     S_prim = compute_primary_matrix(alpha)
@@ -107,24 +94,11 @@ def calculate_expected_r(basis_information, mos_information):
     normalised_operator = normalise_contracted_matrix(contracted_overlap,
                                                       contracted_operator_matrix=contracted_operator)
 
-    # obtain  information from mos file
-    moscontrol = MOSControl()
-    moscontrol.read_variables()
-    cmos = moscontrol.molecular_orbital_file[mos_information['orbital']][mos_information['coeff_range'][0]:
-                                                                         mos_information['coeff_range'][1]]
-    flattened_operator = normalised_operator.flatten()
+    # Create vector of MO coefficients to contract the operator matrix
+    cmos = numpy.array(cmos)
 
-    overall_coeff_number = 0
-    for basis_function_id, list_of_contraction_coeffs in enumerate(contracted_coefficients):
-        for function_coeff_i in range(len(list_of_contraction_coeffs)):
-            flattened_operator[overall_coeff_number] = flattened_operator[overall_coeff_number] \
-                                                       * cmos[basis_function_id]
-            overall_coeff_number += 1
-
-    expectation_value = 0
-    for i in range(len(flattened_operator)):
-        for j in range(len(flattened_operator)):
-            expectation_value += flattened_operator[i] * flattened_operator[j] * S_prim[i, j]
+    bc = numpy.dot(normalised_operator, cmos)
+    expectation_value = numpy.dot(cmos.transpose(), bc)
 
     print 'Calculated <r> for %s functions, basis %s with orbital %s and basis functions %s: %s' % (
         basis_information['orbital_to_extract'],
@@ -144,13 +118,52 @@ def main():
         'orbital_to_extract': 'p'
     }
 
-    mos_information = {
+    mos_ref_information = {
         'orbital': '1 b2',
         'coeff_range': [0, 2]
     }
 
-    calculate_expected_r(basis_information, mos_information)
-  
+    mos_calc_information = {
+        'orbital': '2 a2"',
+        'coeff_range': [0, 2]
+    }
+
+    basis_h_information = {
+        'basis_name': 'h def-TZVP',
+        'orbital_to_extract': 's'
+    }
+
+    mos_h_information = {
+        'orbital': '1 a',
+        'coeff_range': [0, 3]
+    }
+
+    basis_c_information = {
+        'basis_name': 'c def-SV(P)',
+        'orbital_to_extract': 'p'
+    }
+    mos_c_information = {
+        'orbital': '1 t1u',
+        'coeff_range': [0, 2]
+    }
+
+    basis_h_p_information = {
+        'basis_name': 'h def-TZVP',
+        'orbital_to_extract': 'p'
+    }
+
+    mos_h_p_information = {
+        'orbital': '1 t1u',
+        'coeff_range': [0, 1]
+    }
+
+    exp_r = calculate_expected_r(basis_information, mos_ref_information)
+    # exp_r = calculate_expected_r(basis_c_information, mos_c_information, basis_file_path='basis_C', mos_file_path='mos_C')
+    print 'Z =', 5.0/exp_r
+    # calculate_expected_r(basis_information, mos_calc_information, mos_file_path='alpha_2')
+    # calculate_expected_r(basis_h_information, mos_h_information, basis_file_path='basis_H', mos_file_path='alpha_H')
+    # calculate_expected_r(basis_h_p_information, mos_h_p_information, basis_file_path='basis_H_p', mos_file_path='mos_H_p')
+
+
 if __name__ == "__main__":
     main()
-    

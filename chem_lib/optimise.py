@@ -40,14 +40,13 @@ example_basis_file_dict = {
 
 class BasisControl:
     def __init__(self):
-        self.variable_file_path = 'basis'
+        self.variable_file_path = 'bases/basis'
         self.line_types = ['$basis', '$ecp']
         self.orbital_descriptors = ['1s', '2s', '3s', '4s', '5s',
                                     '1p', '2p', '3p', '4p', '5p',
                                     '1d', '2d', '3d', '4d', '5d',
                                     'f', 's-f', 'p-f', 'd-f', 'd', 's-d', 'p-d', 'p', 's-p']
         self.basis_file = None
-        self.read_variables()
 
     def read_variables(self):
         variables = {'$basis': OrderedDict(),
@@ -150,7 +149,32 @@ class BasisControl:
                 var_file.close()
                 return
 
-    def extract_coefficients(self, basis_name, orbital_function_type):
+    def get_coefficients_exponents(self, basis_file_extract, basis_set, shell_type):
+        """Retrieve coefficients and exponents from basis file."""
+        alpha_list = []
+        coeff_list = []
+
+        def extract_for_shell(basis_function_name):
+            sub_alpha_list = []
+            sub_coeff_list = []
+            for shell in basis_file_extract["$basis"][basis_set].keys():
+                if basis_function_name in shell:
+                    a = basis_file_extract["$basis"][basis_set]
+                    for exp in a[shell]:
+                        sub_alpha_list.append(exp["exponent"])
+                        sub_coeff_list.append(exp["coefficient"])
+            return sub_alpha_list, sub_coeff_list
+
+        p_alpha, p_coeff = extract_for_shell(shell_type)
+        coeff_list.append(p_coeff)
+        alpha_list.append(p_alpha)
+
+        coeff_list = [item for sublist in coeff_list for item in sublist]
+        alpha_list = [item for sublist in alpha_list for item in sublist]
+
+        return coeff_list, alpha_list
+
+    def extract_contracted_coefficients(self, basis_name, orbital_function_type):
         contracted_coefficients_list = []
         for function_type, functions in self.basis_file['$basis'][basis_name].iteritems():
             if orbital_function_type in function_type:
