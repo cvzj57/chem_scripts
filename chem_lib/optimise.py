@@ -122,7 +122,6 @@ class BasisControl:
                 print 'found basis: %s' % basis_ecp_name
             elif stripped in self.orbital_descriptors:
                 orbital_descriptor = stripped
-                print 'found orbital: %s' % orbital_descriptor
 
             # Add new details
             if line_type == new_variable['line_type'] \
@@ -134,12 +133,12 @@ class BasisControl:
                     func = new_variable['functions_list'][funcno]
 
                     if line_type == '$basis':
-                        var_file_data[lineno+funcno+1] = ' %s %s \n' % (func['exponent'],
-                                                                        func['coefficient'])
+                        var_file_data[lineno+funcno+1] = ' %s %s \n' % (func['coefficient'],
+                                                                        func['exponent'])
                     elif line_type == '$ecp':
-                        var_file_data[lineno+funcno+1] = ' %s %s %s \n' % (func['exponent'],
+                        var_file_data[lineno+funcno+1] = ' %s %s %s \n' % (func['coefficient'],
                                                                            func['r^n'],
-                                                                           func['coefficient'])
+                                                                           func['exponent'])
 
                     # And write everything back
                     with open(self.variable_file_path, 'w') as var_file:
@@ -176,10 +175,12 @@ class BasisControl:
 
     def extract_contracted_coefficients(self, basis_name, orbital_function_type):
         contracted_coefficients_list = []
+        contracted_exponents_list = []
         for function_type, functions in self.basis_file['$basis'][basis_name].iteritems():
             if orbital_function_type in function_type:
                 contracted_coefficients_list.append([function['coefficient'] for function in functions])
-        return contracted_coefficients_list
+                contracted_exponents_list.append([function['exponent'] for function in functions])
+        return contracted_coefficients_list, contracted_exponents_list
 
     @staticmethod
     def run_dscf():
@@ -187,6 +188,10 @@ class BasisControl:
         subprocess.call(['dscf'])
 
     @staticmethod
-    def run_ridft():
-        print "running ridft..."
-        subprocess.call(['ridft'])
+    def run_ridft(add_to_log=False):
+        print "running ridft, add to log is %s" % add_to_log
+        if add_to_log == True:
+            command = 'ridft > ridft.log'
+        else:
+            command = 'ridft'
+        subprocess.call(command, shell=True)
