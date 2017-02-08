@@ -116,10 +116,8 @@ class BasisControl:
             stripped = "".join(line.split())
             if stripped in self.line_types:
                 line_type = stripped
-                print 'found definition: %s' % line_type
             elif line[0] != ' ' and len((' '.join(line.split())).split()) is 2:
                 basis_ecp_name = ' '.join(line.split())
-                print 'found basis: %s' % basis_ecp_name
             elif stripped in self.orbital_descriptors:
                 orbital_descriptor = stripped
 
@@ -128,7 +126,6 @@ class BasisControl:
                     and basis_ecp_name == new_variable['basis_ecp_name'] \
                     and orbital_descriptor == new_variable['orbital_descriptor']:
 
-                print 'Found variables to modify...'
                 for funcno, new_arguments in enumerate(new_variable['functions_list'], start=0):
                     func = new_variable['functions_list'][funcno]
 
@@ -144,6 +141,11 @@ class BasisControl:
                     with open(self.variable_file_path, 'w') as var_file:
                         if var_file_data:
                             var_file.writelines(var_file_data)
+
+                    print "Modified %s, %s with new coeff %s, exp %s" % (new_variable['basis_ecp_name'],
+                                                                         new_variable['orbital_descriptor'],
+                                                                         func['coefficient'],
+                                                                         func['exponent'])
 
                 var_file.close()
                 return

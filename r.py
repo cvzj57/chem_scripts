@@ -203,11 +203,22 @@ def main():
         'coeff_range': [0, 1]
     }
 
+    basis_ch3_s_information = {
+        'basis_name': 'c def2-SV(P)',
+        'orbital_to_extract': 'p'
+    }
+
+    mos_ch3_s_information = {
+        'orbital': '1 a2\"',
+        'coeff_range': [0, 2]
+    }
+
     tm_info_CH3 = retrieve_turbomole_information(basis_information, mos_ref_information)
     tm_info_H = retrieve_turbomole_information(basis_h_information, mos_h_information, basis_file_path='basis_H', mos_file_path='alpha_H')
     tm_info_Hp = retrieve_turbomole_information(basis_h_p_information, mos_h_p_information, basis_file_path='basis_H_p', mos_file_path='mos_H_p')
+    tm_info_ch3_s = retrieve_turbomole_information(basis_ch3_s_information, mos_ch3_s_information, basis_file_path='ch3_s_opt_basis', mos_file_path='ch3_s_opt_alpha')
 
-    exp_r = calculate_expected_r(tm_info_CH3)
+    exp_r = calculate_expected_r(tm_info_ch3_s)
 
     pp_exponent = 0.295
 

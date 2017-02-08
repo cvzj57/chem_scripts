@@ -7,44 +7,59 @@ class Optimiser:
     """Contains functions that let the user optimise pseudo-potential parameters based on reference energy."""
     def __init__(self):
         self.reference_E = None
+        self.orbital_to_optimise = None
+        self.basis = BasisControl()
+        self.basis.variable_file_path = 'basis'
+        self.trial_range = (-10.0, 10.0)
+        self.spin_indices = {'alpha': -2, 'beta': -1}
+        self.optimisation_type = 'coefficient'
 
+    def find_energy_for_value(self, trial_value):
+        self.orbital_to_optimise['functions_list'][0][self.optimisation_type] = str(trial_value)
+        self.basis.update_variable(self.orbital_to_optimise)
+        self.basis.run_ridft(add_to_log=True)
 
-def find_energy_for_value(trial_value):
+        out_file = open('ridft.log', 'r')
+        output_energies = []
+        for i, line in enumerate(out_file):
+            split_line = ' '.join(line.split()).split()
+            if split_line:
+                if split_line[0] == "irrep" and self.orbital_to_optimise['orbital_irrep'] in split_line:
+                    energy_line = ' '.join(linecache.getline('ridft.log', i + 3).split()).split()
+                    orbital_e = energy_line[split_line.index(self.orbital_to_optimise['orbital_irrep'])]
+                    print "new energy %s eV" % orbital_e
+                    output_energies.append(orbital_e)
+                    linecache.clearcache()
 
-    orbital_to_update = {'line_type': '$ecp',
-                         'basis_ecp_name': 'h ecp-s',
-                         'orbital_descriptor': 's-f',
-                         'new_functions': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 0.5}]
-                         }
+        return float(output_energies[self.spin_indices[self.orbital_to_optimise['spin']]]) - self.reference_E
 
-    reference_value = -10.537  # eV
-
-    basis = BasisControl()
-    basis.variable_file_path = 'basis'
-    orbital_to_update['functions_list'][0]['coefficient'] = str(trial_value)
-    basis.update_variable(orbital_to_update)
-    basis.run_ridft(add_to_log=True)
-
-    out_file = open('ridft.log', 'r')
-    output_energies = []
-    print 'Checking for energies...'
-    for i, line in enumerate(out_file):
-        split_line = ' '.join(line.split()).split()
-        if len(split_line) == 3:
-            if split_line[0] == "irrep" and split_line[1] == '1a2\"':
-                energy_line = ' '.join(linecache.getline('ridft.log', i + 3).split()).split()
-                orbital_e = energy_line[1]
-                print "found energy %s" % orbital_e
-                output_energies.append(orbital_e)
-                linecache.clearcache()
-
-    return float(output_energies[-2]) - reference_value
+    def run_optimise(self, optimisation_type, reference_energy):
+        self.optimisation_type = optimisation_type
+        self.reference_E = reference_energy
+        return brent_opt(self.find_energy_for_value, self.trial_range[0], self.trial_range[1])
 
 
 def optimise_energy():
-    trial_range = (-10.0, -1.0)
-    optimised_value = brent_opt(find_energy_for_value, trial_range[0], trial_range[1])
-    print optimised_value
+    optimiser = Optimiser()
+    optimiser.orbital_to_optimise = {'line_type': '$ecp',
+                                     'basis_ecp_name': 'h ecp-s',
+                                     'orbital_descriptor': 's-f',
+                                     'orbital_irrep': '1a2\"',
+                                     'spin': 'alpha',
+                                     'functions_list': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 0.5}]
+                                     }
+    optimiser.orbital_to_optimise = {'line_type': '$ecp',
+                                     'basis_ecp_name': 'c ecp-p',
+                                     'orbital_descriptor': 'p-f',
+                                     'orbital_irrep': '1a2\"',
+                                     'spin': 'alpha',
+                                     'functions_list': [{'coefficient': 3.326, 'r^n': 1, 'exponent': 0.295}]
+                                     }
+    reference_energy = -10.537  # eV
+    optimised_value = optimiser.run_optimise('coefficient', reference_energy)
+    print 'Optimisation converged to energy %s eV, with %s %s' % (reference_energy,
+                                                                  optimiser.optimisation_type,
+                                                                  optimised_value)
 
 optimise_energy()
 
