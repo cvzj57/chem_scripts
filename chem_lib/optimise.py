@@ -55,7 +55,7 @@ class BasisControl:
         basis_ecp_name = ''
         orbital_descriptor = ''
         var_file = open(self.variable_file_path, 'r')
-        print 'Opened file: %s' % self.variable_file_path
+        print('Opened file: %s' % self.variable_file_path)
 
         for line in var_file:
             function_dict = None
@@ -69,7 +69,7 @@ class BasisControl:
             elif line[0] != ' ' and len(splitted) is 2:
                 basis_ecp_name = ' '.join(line.split())
                 if basis_ecp_name not in variables[line_type].keys():
-                    print 'found basis: %s' % basis_ecp_name
+                    print('found basis: %s' % basis_ecp_name)
                     variables[line_type][basis_ecp_name] = OrderedDict()
 
             elif stripped in self.orbital_descriptors:
@@ -142,10 +142,10 @@ class BasisControl:
                         if var_file_data:
                             var_file.writelines(var_file_data)
 
-                    print "Modified %s, %s with new coeff %s, exp %s" % (new_variable['basis_ecp_name'],
+                    print("Modified %s, %s with new coeff %s, exp %s" % (new_variable['basis_ecp_name'],
                                                                          new_variable['orbital_descriptor'],
                                                                          func['coefficient'],
-                                                                         func['exponent'])
+                                                                         func['exponent']))
 
                 var_file.close()
                 return
@@ -185,15 +185,19 @@ class BasisControl:
         return contracted_coefficients_list, contracted_exponents_list
 
     @staticmethod
-    def run_dscf():
-        print "running dscf..."
-        subprocess.call(['dscf'])
+    def run_dscf(add_to_log=False, file_path=''):
+        print("running %s dscf, add to log is %s" % (file_path, add_to_log))
+        if add_to_log == True:
+            command = 'dscf > calc.log'
+        else:
+            command = 'dscf'
+        subprocess.call(command, shell=True, cwd=file_path)
 
     @staticmethod
-    def run_ridft(add_to_log=False):
-        print "running ridft, add to log is %s" % add_to_log
+    def run_ridft(add_to_log=False, file_path=''):
+        print("running %s ridft, add to log is %s" % (file_path, add_to_log))
         if add_to_log == True:
-            command = 'ridft > ridft.log'
+            command = 'ridft > calc.log'
         else:
             command = 'ridft'
         subprocess.call(command, shell=True)
