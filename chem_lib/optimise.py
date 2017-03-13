@@ -178,7 +178,7 @@ class BasisControl:
     def extract_contracted_coefficients(self, basis_name, orbital_function_type):
         contracted_coefficients_list = []
         contracted_exponents_list = []
-        for function_type, functions in self.basis_file['$basis'][basis_name].iteritems():
+        for function_type, functions in self.basis_file['$basis'][basis_name].items():
             if orbital_function_type in function_type:
                 contracted_coefficients_list.append([function['coefficient'] for function in functions])
                 contracted_exponents_list.append([function['exponent'] for function in functions])

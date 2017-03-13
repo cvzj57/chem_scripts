@@ -21,7 +21,7 @@ class MOSControl:
     def read_variables(self):
         """Reads Turbomole orbitals into init variables."""
         var_file = open(self.variable_file_path, 'r')
-        print 'Opened file: %s' % self.variable_file_path
+        print('Opened file: %s' % self.variable_file_path)
 
         current_orbital = None
         current_values = []
@@ -31,7 +31,7 @@ class MOSControl:
             splitted = (' '.join(line.split())).split()
 
             if stripped[0] == '$' and stripped != '$end':
-                print 'Found file description %s' % ' '.join(line.split())
+                print('Found file description %s' % ' '.join(line.split()))
                 self.file_description = stripped
                 line_format = stripped[stripped.find('format(')+7:stripped.index(')')]
                 self.values_per_line = int(line_format.split('d')[0])
@@ -54,7 +54,7 @@ class MOSControl:
         self.molecular_orbital_file[current_orbital] = [float(value.replace('D', 'E').replace('-.', '-0.'))
                                                         for sublist in current_values for value in sublist if value]
 
-        print 'Found MOs: %s' % ', '.join([key for key in self.molecular_orbital_file.keys()])
+        print('Found MOs: %s' % ', '.join([key for key in self.molecular_orbital_file.keys()]))
 
 if __name__ == "__main__":
     control = MOSControl()

@@ -15,7 +15,7 @@ class Optimiser:
         self.reference_E = None
         self.basis = BasisControl()
         self.basis.variable_file_path = 'basis'
-        self.trial_range = (-500.0, 1000.0)
+        self.trial_range = (0.0001, 0.3)
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.optimisation_parameter = 'coefficient'
         self.calculation_type = 'dscf'
@@ -50,7 +50,7 @@ class Optimiser:
                         print("new energy %s eV" % total_e)
                         output_energies.append(total_e)
                         linecache.clearcache()
-        print(output_energies)
+        # print(output_energies)
         return float(output_energies[self.spin_indices[orbital_to_optimise['spin']]])
 
     def run_minimise_total_e_difference(self,
@@ -71,6 +71,7 @@ class Optimiser:
                 difference = first_energy - second_energy
                 zeroed = difference - self.reference_E
                 print('%s - %s - %s = %s' % (first_energy, second_energy, self.reference_E, zeroed))
+                print('%s - %s = %s' % (first_energy, second_energy, difference))
                 return first_energy - second_energy - self.reference_E
             else:
                 return self.find_energy_for_value(trial_value, orbital_to_optimise) - self.reference_E
@@ -84,29 +85,45 @@ class Optimiser:
             self.trial_range[1],
             find_e_difference(self.trial_range[1]))
         )
-        return scipy.optimize.minimize_scalar(find_e_difference)
+        # return scipy.optimize.minimize_scalar(find_e_difference)
         # return scipy.optimize.minimize(find_e_difference, numpy.array([self.trial_range[0]]))
-        # return brent_opt(find_e_difference, self.trial_range[0], self.trial_range[1])
+        return brent_opt(find_e_difference, self.trial_range[0], self.trial_range[1])
         # return brute(find_e_difference, (self.trial_range[0], self.trial_range[1]))
 
 
 def optimise_energy():
     optimiser = Optimiser()
-    orbital_to_optimise = {'line_type': '$ecp',
+    s_orbital_to_optimise_s = {'line_type': '$ecp',
                            'basis_ecp_name': 'h ecp-s',
                            'orbital_descriptor': 's-f',
                            'orbital_irrep': '1b1u',
                            'spin': 'mos',
-                           'functions_list': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 20.0}]
+                           'functions_list': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 5.0}]
                            }
-    difference_orbital_to_optimise = {
+    s_orbital_to_optimise_t = {
                                      'line_type': '$ecp',
                                      'basis_ecp_name': 'h ecp-s',
                                      'orbital_descriptor': 's-f',
                                      'orbital_irrep': '1b1u',
                                      'spin': 'mos',
-                                     'functions_list': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 20.0}]
+                                     'functions_list': [{'coefficient': -7.524, 'r^n': 1, 'exponent': 5.0}]
                                      }
+    pz_orbital_to_optimise_s = {
+                           'line_type': '$ecp',
+                           'basis_ecp_name': 'c ecp-p',
+                           'orbital_descriptor': 'p-f',
+                           'orbital_irrep': '1b1u',
+                           'spin': 'mos',
+                           'functions_list': [{'coefficient': -3.88139893705, 'r^n': 1, 'exponent': 0.149275103230995}]
+                           }
+    pz_orbital_to_optimise_t = {
+                           'line_type': '$ecp',
+                           'basis_ecp_name': 'c ecp-p',
+                           'orbital_descriptor': 'p-f',
+                           'orbital_irrep': '1b1u',
+                           'spin': 'mos',
+                           'functions_list': [{'coefficient': -3.88139893705, 'r^n': 1, 'exponent': 0.149275103230995}]
+                           }
     # optimiser.orbital_to_optimise = {'line_type': '$ecp',
     #                                  'basis_ecp_name': 'c ecp-p',
     #                                  'orbital_descriptor': 'p-f',
@@ -114,18 +131,18 @@ def optimise_energy():
     #                                  'spin': 'alpha',
     #                                  'functions_list': [{'coefficient': 3.326, 'r^n': 1, 'exponent': 0.295}]
     #                                  }
-    reference_energy = -15.3626756934  # a HF singlet - triplet difference ethene
+    reference_energy = -0.5645679548  # a HF singlet - triplet difference ethene
     # reference_energy = -10.363  # HF ethene pi
     # reference_energy = -6.629  # DFT ethene pi
-    print(orbital_to_optimise)
+    # print(orbital_to_optimise)
 
-    optimised_value = optimiser.run_minimise_total_e_difference('coefficient',
-                                                                orbital_to_optimise,
-                                                                difference_orbital_to_optimise=difference_orbital_to_optimise,
+    optimised_value = optimiser.run_minimise_total_e_difference('exponent',
+                                                                pz_orbital_to_optimise_s,
+                                                                difference_orbital_to_optimise=pz_orbital_to_optimise_t,
                                                                 reference_energy=reference_energy)
     print('Optimisation converged to energy %s eV, with %s %s' % (reference_energy,
                                                                   optimiser.optimisation_parameter,
-                                                                  optimised_value.x))
+                                                                  optimised_value))
 
 optimise_energy()
 
