@@ -40,7 +40,7 @@ example_basis_file_dict = {
 
 class BasisControl:
     def __init__(self):
-        self.variable_file_path = 'bases/basis'
+        self.variable_file_path = '../tm_files/basis'
         self.line_types = ['$basis', '$ecp']
         self.orbital_descriptors = ['1s', '2s', '3s', '4s', '5s',
                                     '1p', '2p', '3p', '4p', '5p',

@@ -79,7 +79,7 @@ class MatrixHandler:
         return normalised_matrix
 
     def retrieve_turbomole_information(self, basis_information, mos_information,
-                                       basis_file_path='basis', mos_file_path='alpha'):
+                                       basis_file_path='tm_files/basis', mos_file_path='tm_files/alpha'):
         # obtain information from basis file
         basis_file_extract = BasisControl()
         basis_file_extract.variable_file_path = basis_file_path
@@ -162,6 +162,35 @@ class MatrixHandler:
 
         return -mo_overlap if as_minimisation_arg is True else mo_overlap
 
+    def run_handler(self, basis_info, mos_info, pp_exponent=None, basis_path='tm_files/basis', mos_path='tm_files/alpha'):
+
+        handler = MatrixHandler()
+        handler.retrieve_turbomole_information(basis_information=basis_info,
+                                               mos_information=mos_info,
+                                               basis_file_path=basis_path,
+                                               mos_file_path=mos_path)
+
+        exp_r = handler.calculate_expected_r()
+
+        if not pp_exponent:
+            pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
+        print('pp exp %s' % pp_exponent)
+
+        mo_overlap = handler.calculate_mo_overlap(pp_exponent, as_minimisation_arg=False)
+        Z_eff = 5.0 / exp_r
+        dZ_eff = (5.0 / exp_r - 1) / mo_overlap ** 2
+
+        print('<r> =', exp_r)
+        print('effective total Z =', Z_eff)
+        print('MO PP overlap =', mo_overlap)
+        print('dZ from PP =', dZ_eff)
+
+        return {'pp_exp': pp_exponent,
+                'mo_overlap': mo_overlap,
+                '<r>': exp_r,
+                'Z_eff': Z_eff,
+                'dZ_eff': dZ_eff}
+
 
 def main():
 
@@ -195,7 +224,7 @@ def main():
         'orbital_to_extract': 'p'
     }
     mos_c_information = {
-        'orbital': '1 t1u',
+        'orbital': '9 a',
         'coeff_range': [0, 2]
     }
 
@@ -222,15 +251,17 @@ def main():
     handler = MatrixHandler()
 
     handler.retrieve_turbomole_information(basis_information, mos_ref_information)
+    # handler.retrieve_turbomole_information(basis_c_information, mos_c_information, basis_file_path='tm_files/basis_C', mos_file_path='tm_files/alpha_C')
     # handler.retrieve_turbomole_information(basis_h_information, mos_h_information, basis_file_path='basis_H', mos_file_path='alpha_H')
     # handler.retrieve_turbomole_information(basis_h_p_information, mos_h_p_information, basis_file_path='basis_H_p', mos_file_path='mos_H_p')
     # handler.retrieve_turbomole_information(basis_ch3_s_information, mos_ch3_s_information, basis_file_path='ch3_s_opt_basis', mos_file_path='ch3_s_opt_alpha')
 
     exp_r = handler.calculate_expected_r()
 
-    # pp_exponent = 0.295
+    pp_exponent = 0.295
     # pp_exponent = 10.0
-    pp_exponent = 0.1492751032
+    # pp_exponent = 0.1492751032
+    # pp_exponent = 4.0
 
     # pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
     print('pp exp %s' % pp_exponent)
