@@ -98,7 +98,8 @@ class MatrixHandler:
         cmos = moscontrol.molecular_orbital_file[mos_information['orbital']][mos_information['coeff_range'][0]:
                                                                              mos_information['coeff_range'][1]]
 
-        print('Extracted info for %s functions, basis %s with orbital %s and basis functions %s.' % (
+        print('Extracted info for %s: %s functions, basis %s with orbital %s and basis functions %s.' % (
+            basis_file_path,
             basis_information['orbital_to_extract'],
             basis_information['basis_name'],
             mos_information['orbital'],
@@ -258,12 +259,14 @@ def main():
 
     exp_r = handler.calculate_expected_r()
 
-    pp_exponent = 0.295
+    # pp_exponent = 0.295
+    # pp_exponent = 0.34697
     # pp_exponent = 10.0
     # pp_exponent = 0.1492751032
     # pp_exponent = 4.0
+    pp_exponent = 0.4
 
-    # pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
+    pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
     print('pp exp %s' % pp_exponent)
 
     mo_overlap = handler.calculate_mo_overlap(pp_exponent, as_minimisation_arg=False)

@@ -54,7 +54,7 @@ class MOSControl:
         self.molecular_orbital_file[current_orbital] = [float(value.replace('D', 'E').replace('-.', '-0.'))
                                                         for sublist in current_values for value in sublist if value]
 
-        print('Found MOs: %s' % ', '.join([key for key in self.molecular_orbital_file.keys()]))
+        #print('Found MOs: %s' % ', '.join([key for key in self.molecular_orbital_file.keys()]))
 
 if __name__ == "__main__":
     control = MOSControl()

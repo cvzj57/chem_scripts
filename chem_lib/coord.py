@@ -1,6 +1,7 @@
 import numpy
 import math
-import time
+'''Library for the reading and manipulation of turbomole coordinate files. Contains functions to supply
+pseudopotentials to all carbon atoms in a molecule.'''
 
 sample_coords = [
     {'x': 0.0, 'y': 0.0, 'z': 0.0, 'el': 'c', '#': 1},
@@ -27,10 +28,8 @@ class CoordControl:
 
             if stripped[0] == '$':
                 if 'coord' in stripped:
-                    print('Found coords.')
                     continue
                 else:
-                    print('No more coords.')
                     break
 
             new_atom['el'] = splitted[-1]
@@ -40,7 +39,7 @@ class CoordControl:
             new_atom['#'] = lineno
 
             self.coord_list.append(new_atom)
-        print(self.coord_list)
+        print('Read atom coords.')
         var_file.close()
 
     def write_coord(self, new_atom, overwrite=False):
@@ -55,7 +54,6 @@ class CoordControl:
             atom_hash = new_atom['#']
             del var_file_data[atom_hash]
         else:
-            print(sorted(self.coord_list, key=return_hash, reverse=True)[0]['#'])
             atom_hash = sorted(self.coord_list, key=return_hash, reverse=True)[0]['#']+1
 
         var_file_data.insert(atom_hash, ' %s %s %s %s\n' % (
@@ -71,7 +69,7 @@ class CoordControl:
                 var_file.writelines(var_file_data)
 
         print("Modified atom %s, now %s %s %s %s" % (
-            new_atom['#'],
+            atom_hash,
             new_atom['x'],
             new_atom['y'],
             new_atom['z'],
@@ -89,10 +87,8 @@ class CoordControl:
 
             if line[0] == '$':
                 if '$coord' in stripped:
-                    print('Found coords.')
                     continue
                 else:
-                    print('No more coords.')
                     break
 
             if 'h' in line:
@@ -118,22 +114,6 @@ class CoordControl:
     def measure_atom_atom_dist(self, index_1, index_2):
         return numpy.linalg.norm(self.vectorise_atom(index_2) - self.vectorise_atom(index_1))
 
-    def atom_atom_vector(self, index_1, index_2):
-        return self.vectorise_atom(index_2) - self.vectorise_atom(index_1)
-
-    def find_nearest_carbon(self, atom_index):
-
-        carbon_indices = []
-        distances = []
-        for atom in self.coord_list:
-            if atom_index != atom['#']:
-                if atom['el'] == 'c':
-                    carbon_indices.append(atom['#'])
-                    distances.append(control.measure_atom_atom_dist(atom_index, atom['#']))
-
-        index = carbon_indices[numpy.argmin(distances)]
-        return index, numpy.min(distances)
-
     def order_atoms_by_distance_from(self, central_atom_index, element=None):
 
         if element:
@@ -142,7 +122,6 @@ class CoordControl:
             coord_list = self.coord_list
 
         def distance_from(list_atom):
-            # print(self.measure_atom_atom_dist(central_atom_index, list_atom['#']))
             return self.measure_atom_atom_dist(central_atom_index, list_atom['#'])
 
         return sorted(coord_list, key=distance_from)
@@ -169,23 +148,20 @@ class CoordControl:
     def pseudopotentialise_molecule(self):
 
         atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
+        print('Finding pseudopotentials for carbon atoms...')
         potential_coords_list = []
 
         for atom in atoms_to_potentialise:
             distanced_atom_list = self.order_atoms_by_distance_from(atom['#'])
             distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
-            # for carbon in distanced_carbon_list:
-            #     print(carbon)
-            print(distanced_carbon_list[1]['#'], atom['#'])
+
             primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#'])-self.vectorise_atom(atom['#'])
-            print(numpy.linalg.norm(primary_vector))
             normal_vector = numpy.cross(
                 self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
                 self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
             )
 
             primary_potential_vector = self.lengtherise_vector(primary_vector, self.atom_potential_set_distance)
-            # print(numpy.linalg.norm(primary_potential_vector))
             potential_set_split_vector = self.lengtherise_vector(normal_vector, self.potential_set_split_distance)
 
             relative_potential_vectors = [
@@ -210,32 +186,20 @@ class CoordControl:
                 relative_potential_vectors.append(pps_negative)
 
 
-            # potential coords are still relative to their atom, now make them real
+            # potential coords are still relative to their atom, now make them real.
             for vector in relative_potential_vectors:
-                # print({'#': atom['#'], 'el': 'h', 'x': vector[0]+atom['x'], 'y': vector[0]+atom['y'], 'z': vector[0]+atom['z']})
                 potential_coords_list.append(
                     {'#': 0, 'el': 'h', 'x': vector[0]+atom['x'], 'y': vector[1]+atom['y'], 'z': vector[2]+atom['z']},
                 )
 
-        # print(potential_coords_list)
-
         # Now add potentials to coord list, after removing the 'real' hydrogen atoms.
         self.delete_hydrogen_atoms()
-        time.sleep(5)
-        print("here come dem potentials")
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
-
-
 
 
 if __name__ == "__main__":
     control = CoordControl()
     control.read_coords()
-    # control.write_coord({'x': 1.24869729097288, 'y': -0.35894369997066, 'z': -0.48876369930179, 'el': 'c', '#': 1}, overwrite=True)
-    # control.write_coord({'x': -1.24781026329849, 'y': 0.35940201268517, 'z': 0.49082623491110, 'el': 'c', '#': 6})
-    # control.write_coord({'x': 0.0, 'y': 0.0, 'z': 0.0, 'el': 'c', '#': 3})
-
-    print("potentialising")
     control.pseudopotentialise_molecule()
 

@@ -142,10 +142,11 @@ class BasisControl:
                         if var_file_data:
                             var_file.writelines(var_file_data)
 
-                    print("Modified %s, %s with new coeff %s, exp %s" % (new_variable['basis_ecp_name'],
-                                                                         new_variable['orbital_descriptor'],
-                                                                         func['coefficient'],
-                                                                         func['exponent']))
+                    print("Modified %s: %s, %s with new coeff %s, exp %s" % (self.variable_file_path,
+                                                                             new_variable['basis_ecp_name'],
+                                                                             new_variable['orbital_descriptor'],
+                                                                             func['coefficient'],
+                                                                             func['exponent']))
 
                 var_file.close()
                 return
