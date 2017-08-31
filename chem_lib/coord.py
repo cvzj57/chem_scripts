@@ -11,7 +11,7 @@ sample_coords = [
 
 class CoordControl:
     def __init__(self):
-        self.coord_file_path = '../tm_files/coord_c4h6'
+        self.coord_file_path = 'coord'
         self.coord_list = []
         self.no_potential_sets_per_atom = 3
         self.atom_potential_set_distance = 0.5
@@ -155,7 +155,10 @@ class CoordControl:
             distanced_atom_list = self.order_atoms_by_distance_from(atom['#'])
             distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
 
-            primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#'])-self.vectorise_atom(atom['#'])
+            if len(distanced_carbon_list) == 1:
+                primary_vector = self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#'])
+            else:
+                primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#'])-self.vectorise_atom(atom['#'])
             normal_vector = numpy.cross(
                 self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
                 self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
