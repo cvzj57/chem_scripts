@@ -12,7 +12,7 @@ sample_coords = [
 
 class CoordControl:
     def __init__(self):
-        self.coord_file_path = '../tm_files/near_3_test'
+        self.coord_file_path = 'coord'
         self.coord_list = []
         self.no_potential_sets_per_atom = 3
         self.atom_potential_set_distance = 0.5
@@ -105,6 +105,34 @@ class CoordControl:
 
         print("Removed all hydrogen atoms.")
 
+        var_file.close()
+
+    def delete_specified_atoms(self, deletion_hash_list):
+        var_file = open(self.coord_file_path, 'r')
+        var_file_data = var_file.readlines()
+        lines_to_delete = []
+
+        for lineno, line in enumerate(var_file_data):
+            stripped = ''.join(line.split())
+
+            if line[0] == '$':
+                if '$coord' in stripped:
+                    continue
+                else:
+                    break
+
+            if lineno in deletion_hash_list:
+                lines_to_delete.insert(0, lineno)
+
+        for lineno in lines_to_delete:
+            del var_file_data[lineno]
+
+        # And write everything back
+        with open(self.coord_file_path, 'w') as var_file:
+            if var_file_data:
+                var_file.writelines(var_file_data)
+
+        print("Removed atoms: %s" % deletion_hash_list)
         var_file.close()
 
     def vectorise_atom(self, index):
@@ -205,8 +233,8 @@ class CoordControl:
         """Creates pseudo-potentials to replace specified atoms a la ethane."""
 
         # Find atoms to replace
-        replacement_list = sysargs[2:]
-        atoms_to_replace = (item for item in self.coord_list if item["#"] in replacement_list)
+        replacement_list = list(map(int, sysargs[2:]))
+        atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
         print('Replacing atoms %s ...' % atoms_to_replace)
         potential_coords_list = []
 
@@ -227,11 +255,10 @@ class CoordControl:
                  'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
             )
 
-        # Now add potentials to coord list, after removing the 'real' hydrogen atoms.
-        self.delete_hydrogen_atoms()
+        # Now add potentials to coord list, after removing the 'real' atoms.
+        self.delete_specified_atoms(replacement_list)
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
-        return
 
 if __name__ == "__main__":
     control = CoordControl()
