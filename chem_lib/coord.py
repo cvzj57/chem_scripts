@@ -2,7 +2,7 @@ import numpy
 import math
 import sys
 '''Library for the reading and manipulation of turbomole coordinate files. Contains functions to supply
-pseudopotentials to all carbon atoms in a molecule.'''
+pseudo-potentials to molecules.'''
 
 sample_coords = [
     {'x': 0.0, 'y': 0.0, 'z': 0.0, 'el': 'c', '#': 1},
@@ -174,11 +174,17 @@ class CoordControl:
                            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-    def pseudopotentialise_molecule(self):
+    def pseudopotentialise_molecule(self, sysargs=None):
         """Creates sets of pseudo-potentials for all C atoms a la CH3 radical."""
 
-        atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
-        print('Finding pseudopotentials for carbon atoms...')
+        # Find atoms to replace
+        if sysargs:
+            replacement_list = list(map(int, sysargs[2:]))
+            atoms_to_potentialise = list(item for item in self.coord_list if item["#"] in replacement_list)
+        else:
+            atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
+        print('Pseudo-potentialising carbon atoms %s ...' % atoms_to_potentialise)
+
         potential_coords_list = []
 
         for atom in atoms_to_potentialise:
@@ -249,7 +255,7 @@ class CoordControl:
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(
-                {'#': 0, 'el': 'h',
+                {'#': 0, 'el': 'he',
                  'x': vector_c_to_new_pp[0] + distanced_carbon_list[0]['x'],
                  'y': vector_c_to_new_pp[1] + distanced_carbon_list[0]['y'],
                  'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
@@ -264,7 +270,7 @@ if __name__ == "__main__":
     control = CoordControl()
     control.read_coords()
     if sys.argv[1] == 'sp2':
-        control.pseudopotentialise_molecule()
+        control.pseudopotentialise_molecule(sys.argv)
     elif sys.argv[1] == 'sp3':
         control.pseudopotentialise_ethane_like_molecule(sys.argv)
     else:

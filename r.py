@@ -205,6 +205,12 @@ def main():
         'coeff_range': [0, 2]
     }
 
+    mos_ref_information_alpha_converged = {
+        'orbital': '1 b1',
+        'coeff_range': [0, 2]
+    }
+
+
     mos_calc_information = {
         'orbital': '2 a2"',
         'coeff_range': [0, 2]
@@ -251,7 +257,8 @@ def main():
 
     handler = MatrixHandler()
 
-    handler.retrieve_turbomole_information(basis_information, mos_ref_information)
+    # handler.retrieve_turbomole_information(basis_information, mos_ref_information)
+    handler.retrieve_turbomole_information(basis_information, mos_ref_information_alpha_converged,  mos_file_path='tm_files/alpha_converged')
     # handler.retrieve_turbomole_information(basis_c_information, mos_c_information, basis_file_path='tm_files/basis_C', mos_file_path='tm_files/alpha_C')
     # handler.retrieve_turbomole_information(basis_h_information, mos_h_information, basis_file_path='basis_H', mos_file_path='alpha_H')
     # handler.retrieve_turbomole_information(basis_h_p_information, mos_h_p_information, basis_file_path='basis_H_p', mos_file_path='mos_H_p')
@@ -259,14 +266,15 @@ def main():
 
     exp_r = handler.calculate_expected_r()
 
-    # pp_exponent = 0.295
+    pp_exponent = 0.295
     # pp_exponent = 0.34697
     # pp_exponent = 10.0
     # pp_exponent = 0.1492751032
     # pp_exponent = 4.0
-    pp_exponent = 0.4
+    # pp_exponent = 0.6245
+    # pp_exponent = 1.2489
 
-    pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
+    # pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
     print('pp exp %s' % pp_exponent)
 
     mo_overlap = handler.calculate_mo_overlap(pp_exponent, as_minimisation_arg=False)
