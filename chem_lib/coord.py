@@ -178,12 +178,18 @@ class CoordControl:
         """Creates sets of pseudo-potentials for all C atoms a la CH3 radical."""
 
         # Find atoms to replace
-        if sysargs:
-            replacement_list = list(map(int, sysargs[2:]))
+        deletion_list = []
+        if len(sysargs) > 2:
+            if 'del' in sysargs:
+                deletion_list = list(map(int, sysargs[sysargs.index('del')+1:]))
+                replacement_list = list(map(int, sysargs[2:sysargs.index('del')]))
+            else:
+                replacement_list = list(map(int, sysargs[2:]))
             atoms_to_potentialise = list(item for item in self.coord_list if item["#"] in replacement_list)
         else:
             atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
-        print('Pseudo-potentialising carbon atoms %s ...' % atoms_to_potentialise)
+            deletion_list = (item for item in self.coord_list if item["el"] == 'h')
+        print('Pseudo-potentialising carbon atoms %s ...' % [atom['#'] for atom in atoms_to_potentialise])
 
         potential_coords_list = []
 
@@ -194,7 +200,7 @@ class CoordControl:
             if len(distanced_carbon_list) == 1:
                 primary_vector = self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#'])
             else:
-                primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#'])-self.vectorise_atom(atom['#'])
+                primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom['#'])
             normal_vector = numpy.cross(
                 self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
                 self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
@@ -231,7 +237,7 @@ class CoordControl:
                 )
 
         # Now add potentials to coord list, after removing the 'real' hydrogen atoms.
-        self.delete_hydrogen_atoms()
+        self.delete_specified_atoms(deletion_list)
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
 

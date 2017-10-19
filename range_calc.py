@@ -20,7 +20,7 @@ class Optimiser:
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.optimisation_parameter = 'coefficient'
         self.calculation_type = 'dscf'
-        self.calc_folder_path = 'try_3_opt'
+        self.calc_folder_path = 'try_3_opt_o'
         self.difference_calc_folder_path = 'triplet'
 
     def find_energy_for_value(self, trial_value, orbital_to_optimise,
