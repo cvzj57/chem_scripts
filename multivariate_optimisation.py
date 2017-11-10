@@ -13,7 +13,7 @@ class Optimiser:
         self.basis = BasisControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.calculation_type = 'dscf'
-        self.calc_folder_path = 'try_3_opt'
+        self.calc_folder_path = 'essai_3'
         self.tracked_orbitals = []
         self.ecp_locators = []
 
@@ -111,7 +111,9 @@ class Optimiser:
         )
 
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
-        pp_bounds = [(None, 0.0), (0.001, None), (0.0, None), (0.001, None)]
+        pp_bounds = [(None, 0.0), (0.001, None), (None, None), (0.001, None)]
+        # pp_bounds = [(None, 0.0), (0.001, None), (0.0, None), (0.001, None), (0.0, None), (0.001, None)]
+        # Only SLSQP handles constraints and bounds.
         return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
                                        tol=0.0001,
                                        bounds=pp_bounds,
@@ -124,6 +126,48 @@ class Optimiser:
 
 
 def optimise_energy():
+    methane_optimiser = Optimiser()
+    ### Ethene ecp locators
+    methane_optimiser.ecp_locators = [
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'c ecp-p',
+         'orbital_descriptor': 'p-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'he ecp-s',
+         'orbital_descriptor': 's-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        # {'line_type': '$ecp',
+        #  'basis_ecp_name': 'he ecp2-s',
+        #  'orbital_descriptor': 's-f',
+        #  'functions_list': [{'coefficient': 0,
+        #                      'r^n': 1,
+        #                      'exponent': 0}]
+        #  }
+    ]
+
+    ## Orbitals to optimise
+    methane_optimiser.tracked_orbitals = [
+        {'irrep': '4a',
+         'spin': 'mos',
+         'reference_energy': -10.923},
+        {'irrep': '3a',
+         'spin': 'mos',
+         'reference_energy': -10.923},
+        {'irrep': '2a',
+         'spin': 'mos',
+         'reference_energy': -19.105},
+        # {'irrep': '1a',
+        #  'spin': 'mos',
+        #  'reference_energy': -277.846},
+    ]
+
     ethene_optimiser = Optimiser()
     ### Ethene ecp locators
     ethene_optimiser.ecp_locators = [
@@ -176,28 +220,71 @@ def optimise_energy():
     ethane_optimiser.tracked_orbitals = [
         {'irrep': '3a',
          'spin': 'mos',
-         'reference_energy': -13.328},
+         'reference_energy': -14.028},
         {'irrep': '4a',
          'spin': 'mos',
          'reference_energy': -13.328},
-        {'irrep': '5a',
-         'spin': 'mos',
-         'reference_energy': -14.028},
+        # {'irrep': '5a',
+        #  'spin': 'mos',
+        #  'reference_energy': -13.328},
     ]
 
-    # Array of initial guesses (MUST be same order as tracked orbitals e.g. p_coeff, p_exp, s_coeff, s_exp)
+    propane_c_optimiser = Optimiser()
+    ### Propane_c ecp locators
+    propane_c_optimiser.ecp_locators = [
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'c ecp-p',
+         'orbital_descriptor': 'p-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'he ecp-s',
+         'orbital_descriptor': 's-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         }
+    ]
+
+    ## Orbitals to optimise
+    propane_c_optimiser.tracked_orbitals = [
+        {'irrep': '1b1',
+         'spin': 'mos',
+         'reference_energy': -10.923},
+        {'irrep': '1a1',
+         'spin': 'mos',
+         'reference_energy': -19.105},
+        # {'irrep': '1 b2',
+        #  'spin': 'mos',
+        #  'reference_energy': -277.846},
+    ]
+
+    # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
 
     # Paola's ethane ecp
-    initial_guesses = numpy.array([-2.8056200103, 0.6244618784275526, 0.5, 1.5])
+    # initial_guesses = numpy.array([-2.8056200103, 0.6244618784275526, 0.5, 1.5])
+
+    # My ethane ecp
+    initial_guesses = numpy.array([
+        -2.8056200103, 0.6,
+        3.0, 5.5
+    ])
 
     # basis set 4 (ethene)
     # initial_guesses = numpy.array([-3.9096200103, 0.6244618784, 1.5, 0.5])
 
     # base guess
-    # initial_guesses = numpy.array([-0.1, 0.1, 0.1, 0.1])
+    # initial_guesses = numpy.array([0.1, 0.1, 0.1, 0.1])
+
+    # 4 orbital base guess
+    # initial_guesses = numpy.array([-0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
     # optimised_value = ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     optimised_value = ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = methane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = propane_c_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
 
     print(optimised_value)
 

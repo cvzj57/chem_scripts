@@ -18,6 +18,14 @@ class CoordControl:
         self.atom_potential_set_distance = 0.5
         self.potential_set_split_distance = 0.25
 
+    @staticmethod
+    def check_is_int(s):
+        try:
+            int(s)
+            return True
+        except ValueError:
+            return False
+
     def read_coords(self):
         var_file = open(self.coord_file_path, 'r')
 
@@ -245,19 +253,39 @@ class CoordControl:
         """Creates pseudo-potentials to replace specified atoms a la ethane."""
 
         # Find atoms to replace
-        replacement_list = list(map(int, sysargs[2:]))
-        atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
-        print('Replacing atoms %s ...' % atoms_to_replace)
+        deletion_list = []
         potential_coords_list = []
+        if len(sysargs) > 2:
+            if 'del' in sysargs:
+                deletion_list = list(map(int, sysargs[sysargs.index('del') + 1:]))
+                replacement_list = list(map(int, sysargs[2:sysargs.index('del')]))
+            else:
+                replacement_list = list(map(int, sysargs[2:]))
+            atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
+        else:
+            atoms_to_replace = (item for item in self.coord_list if item["el"] == 'c')
+            deletion_list = (item for item in self.coord_list if item["el"] == 'h')
+        print('Pseudo-potentialising carbon atoms %s ...' % [atom['#'] for atom in atoms_to_replace])
+
+        # Option to place a potential on the *opposite* side of the carbon as well.
+        dipolar_potentials = False
+        if 'dipole' in sysargs:
+            print('Dipolar potentialisation activated...')
+            dipolar_potentials = True
 
         for atom in atoms_to_replace:
             # Find vector from nearest carbon.
             distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
+
             vector_from_nearest_carbon = self.vectorise_atom(atom['#']) \
                 - self.vectorise_atom(distanced_carbon_list[0]['#'])
+            vector_to_nearest_carbon = self.vectorise_atom(distanced_carbon_list[0]['#']) \
+                - self.vectorise_atom(atom['#'])
+
 
             # Lengtherise vector from carbon to give relative pp coordinates.
             vector_c_to_new_pp = self.lengtherise_vector(vector_from_nearest_carbon, self.atom_potential_set_distance)
+            vector_c_to_new_dipole_pp = self.lengtherise_vector(vector_to_nearest_carbon, self.atom_potential_set_distance)
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(
@@ -266,9 +294,17 @@ class CoordControl:
                  'y': vector_c_to_new_pp[1] + distanced_carbon_list[0]['y'],
                  'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
             )
+            if dipolar_potentials is True:
+                # Add to carbon coords to get new pp coords.
+                potential_coords_list.append(
+                    {'#': 0, 'el': 'he',
+                     'x': vector_c_to_new_dipole_pp[0] + distanced_carbon_list[0]['x'],
+                     'y': vector_c_to_new_dipole_pp[1] + distanced_carbon_list[0]['y'],
+                     'z': vector_c_to_new_dipole_pp[2] + distanced_carbon_list[0]['z']},
+                )
 
         # Now add potentials to coord list, after removing the 'real' atoms.
-        self.delete_specified_atoms(replacement_list)
+        self.delete_specified_atoms(deletion_list)
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
 
