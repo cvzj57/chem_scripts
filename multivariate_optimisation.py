@@ -2,6 +2,7 @@
 import linecache
 import os
 from chem_lib.optimise import BasisControl
+from chem_lib.gradient import GradientControl
 import scipy.optimize
 import numpy
 
@@ -11,11 +12,14 @@ class Optimiser:
     def __init__(self):
         self.reference_E = None
         self.basis = BasisControl()
+        self.gradient = GradientControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.calculation_type = 'dscf'
-        self.calc_folder_path = 'essai_3'
-        self.tracked_orbitals = []
+        self.calc_folder_path = 'ref_to_pseudo'
+        self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
+        self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.ecp_locators = []
+        self.gradient_error_multiplier = 0.0  # multiplier gradient minimisation
 
     def read_result(self, energy_type=None, orbital_to_read=None):
         """Updates basis file with new coeff/exp value, runs the calculation and reads either the
@@ -83,7 +87,7 @@ class Optimiser:
             elif self.calculation_type == 'ridft':
                 self.basis.run_ridft(add_to_log=True, file_path=self.calc_folder_path)
 
-            # Read results
+            # Read orbital energies
             read_orbital_energies = []
             for tracked_orbital in self.tracked_orbitals:
                 read_orbital_energies.append(self.read_result(energy_type='orbital',
@@ -102,9 +106,21 @@ class Optimiser:
                 )
                 normalised_orbital_energies.append(normalised_energy)
 
+            # Read energy gradients
+            gradient_error = 0.0
+            self.gradient.variable_file_path = self.calc_folder_path
+            self.gradient.read_variables()
+            watched_atom_indices = (index for (index, d) in enumerate(self.gradient.gradient_file[-1]['atoms']) if d['#'] in self.tracked_atom_gradients)
+            for atom_index in watched_atom_indices:
+                dx = self.gradient.gradient_file[-1]['atoms'][atom_index]['dx']
+                dy = self.gradient.gradient_file[-1]['atoms'][atom_index]['dy']
+                dz = self.gradient.gradient_file[-1]['atoms'][atom_index]['dz']
+                gradient_error = gradient_error + dx + dy + dz
+            gradient_error * self.gradient_error_multiplier
+
             # self.normalised_energies
             print('Total error: %s eV' % sum(normalised_orbital_energies))
-            return sum(normalised_orbital_energies)
+            return sum(normalised_orbital_energies) + gradient_error
 
         print('Optimising ecps %s over irreps %s' % (
             [locator['basis_ecp_name'] for locator in self.ecp_locators], [tracked['irrep'] for tracked in self.tracked_orbitals])
@@ -261,16 +277,50 @@ def optimise_energy():
         #  'reference_energy': -277.846},
     ]
 
+    half_ethene_optimiser = Optimiser()
+    ### half-Ethene ecp locators
+    half_ethene_optimiser.ecp_locators = [
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'c ecp-p',
+         'orbital_descriptor': 'p-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'h ecp-s',
+         'orbital_descriptor': 's-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         }
+    ]
+
+    ## Orbitals to optimise
+    half_ethene_optimiser.tracked_orbitals = [
+        # {'irrep': '2b2',
+        #  'spin': 'mos',
+        #  'reference_energy': 7.0},
+        {'irrep': '1b1',
+         'spin': 'mos',
+         'reference_energy': -10.363},
+        {'irrep': '1b2',
+         'spin': 'mos',
+         'reference_energy': -13.771},
+        {'irrep': '3a1',
+         'spin': 'mos',
+         'reference_energy': -16.126},
+    ]
+
+
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
 
     # Paola's ethane ecp
     # initial_guesses = numpy.array([-2.8056200103, 0.6244618784275526, 0.5, 1.5])
 
     # My ethane ecp
-    initial_guesses = numpy.array([
-        -2.8056200103, 0.6,
-        3.0, 5.5
-    ])
+    # initial_guesses = numpy.array([-2.8056200103, 0.6, 3.0, 5.5])
+    initial_guesses = numpy.array([-2.090443639, 0.3974474906, 35.58826369, 15.19887795])
 
     # basis set 4 (ethene)
     # initial_guesses = numpy.array([-3.9096200103, 0.6244618784, 1.5, 0.5])
@@ -282,9 +332,10 @@ def optimise_energy():
     # initial_guesses = numpy.array([-0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
     # optimised_value = ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    optimised_value = ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     # optimised_value = methane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     # optimised_value = propane_c_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    optimised_value = half_ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
 
     print(optimised_value)
 
