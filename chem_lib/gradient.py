@@ -1,3 +1,5 @@
+import subprocess
+import math
 """
 This library contains code for handling Turbomole's gradient files.
 """
@@ -14,13 +16,12 @@ sample_cycle = [
 
 class GradientControl:
     def __init__(self):
-        self.variable_file_path = '../tm_files/gradient'
+        self.variable_file_path = '../tm_files/gradient2'
         self.gradient_file = []
 
     def read_variables(self):
         """Reads Turbomole gradients into init variables."""
         var_file = open(self.variable_file_path, 'r')
-        print('Opened file: %s' % self.variable_file_path)
 
         cycle_dict = {'atoms': []}
         current_coord_hash = 1
@@ -37,6 +38,7 @@ class GradientControl:
                 current_gradient_hash = 1
                 if len(cycle_dict['atoms']) != 0:
                     self.gradient_file.append(cycle_dict)
+                    cycle_dict = {'atoms': []}
 
             if len(splitted) == 4 and (len(splitted[-1]) == 1 or len(splitted[-1]) ==2):
                 cycle_dict['atoms'].append({'x': splitted[0],
@@ -55,9 +57,15 @@ class GradientControl:
 
         self.gradient_file.append(cycle_dict)
 
-        print('Successfully read gradient file (%s cycle(s), %s atom(s))' % (len(self.gradient_file),
-                                                                             len(self.gradient_file[0]['atoms'])
-                                                                             ))
+        # print('Successfully read gradient file (%s cycle(s), %s atom(s))' % (len(self.gradient_file),
+        #                                                                      len(self.gradient_file[-1]['atoms'])
+        #                                                                      ))
+
+    @staticmethod
+    def run_grad(file_path=''):
+        print("running %s grad..." % file_path)
+        command = 'grad > grad.log'
+        subprocess.call(command, shell=True, cwd=file_path)
 
     def translate_into_fortran(self, dEdZ):
         new_dE_string = ("%e" % dEdZ).replace('e', 'D')
@@ -72,7 +80,27 @@ class GradientControl:
             new_dE_string = new_beginning + dEdZ[3:-1] + str(new_ending)
         return new_dE_string
 
+    # def calculate_gradient_correction(self, dcc):
+    #     a = 0.484478
+    #     b = 1.68407
+    #     x0 = 2.41293
+    #     return -b * a * math.exp(-b * (dcc - x0))vi job.12
+
+    def calculate_gradient_correction(self, dcc):
+        no_atoms = 8
+        a = 3.48487
+        b = 1.94326
+        c = -2.72191
+        x0 = 1.74196
+        factor = 1.0
+        return -b * a * math.exp(-b * (dcc - x0))
+
 
 if __name__ == "__main__":
     control = GradientControl()
     control.read_variables()
+    correction_file = open('corrections.dat', 'w+')
+    for dcc in range(30, 610, 10):
+        print(dcc/100)
+        correction_file.writelines(str(control.calculate_gradient_correction(dcc/100))+'\n')
+    correction_file.close()

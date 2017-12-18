@@ -5,6 +5,7 @@ from chem_lib.optimise import BasisControl
 from chem_lib.gradient import GradientControl
 import scipy.optimize
 import numpy
+import json
 
 
 class Optimiser:
@@ -15,11 +16,13 @@ class Optimiser:
         self.gradient = GradientControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.calculation_type = 'dscf'
-        self.calc_folder_path = 'ref_to_pseudo'
+        self.calc_folder_path = 'pseudo_optimisation'
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.ecp_locators = []
-        self.gradient_error_multiplier = 0.0  # multiplier gradient minimisation
+        self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
+        with open('chem_lib/optimiser_orbital_library.json', 'r') as json_file:
+            self.orbital_library = json.load(json_file)
 
     def read_result(self, energy_type=None, orbital_to_read=None):
         """Updates basis file with new coeff/exp value, runs the calculation and reads either the
@@ -108,18 +111,20 @@ class Optimiser:
 
             # Read energy gradients
             gradient_error = 0.0
-            self.gradient.variable_file_path = self.calc_folder_path
-            self.gradient.read_variables()
-            watched_atom_indices = (index for (index, d) in enumerate(self.gradient.gradient_file[-1]['atoms']) if d['#'] in self.tracked_atom_gradients)
-            for atom_index in watched_atom_indices:
-                dx = self.gradient.gradient_file[-1]['atoms'][atom_index]['dx']
-                dy = self.gradient.gradient_file[-1]['atoms'][atom_index]['dy']
-                dz = self.gradient.gradient_file[-1]['atoms'][atom_index]['dz']
-                gradient_error = gradient_error + dx + dy + dz
-            gradient_error * self.gradient_error_multiplier
+            if len(self.tracked_atom_gradients) > 0:
+                self.gradient.run_grad(file_path=self.calc_folder_path)
+                self.gradient.variable_file_path = self.calc_folder_path + 'gradient'
+                self.gradient.read_variables()
+                watched_atom_indices = (index for (index, d) in enumerate(self.gradient.gradient_file[-1]['atoms']) if d['#'] in self.tracked_atom_gradients)
+                for atom_index in watched_atom_indices:
+                    dx = self.gradient.gradient_file[-1]['atoms'][atom_index]['dx']
+                    dy = self.gradient.gradient_file[-1]['atoms'][atom_index]['dy']
+                    dz = self.gradient.gradient_file[-1]['atoms'][atom_index]['dz']
+                    gradient_error = gradient_error + numpy.abs(dx) + numpy.abs(dy) + numpy.abs(dz)
+                gradient_error = gradient_error * self.gradient_error_multiplier
+                print('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
 
-            # self.normalised_energies
-            print('Total error: %s eV' % sum(normalised_orbital_energies))
+            print('Total error: %s eV' % str(sum(normalised_orbital_energies) + gradient_error))
             return sum(normalised_orbital_energies) + gradient_error
 
         print('Optimising ecps %s over irreps %s' % (
@@ -142,9 +147,8 @@ class Optimiser:
 
 
 def optimise_energy():
-    methane_optimiser = Optimiser()
-    ### Ethene ecp locators
-    methane_optimiser.ecp_locators = [
+
+    standard_ecp_locators = [
         {'line_type': '$ecp',
          'basis_ecp_name': 'c ecp-p',
          'orbital_descriptor': 'p-f',
@@ -158,50 +162,73 @@ def optimise_energy():
          'functions_list': [{'coefficient': 0,
                              'r^n': 1,
                              'exponent': 0}]
-         },
-        # {'line_type': '$ecp',
-        #  'basis_ecp_name': 'he ecp2-s',
-        #  'orbital_descriptor': 's-f',
-        #  'functions_list': [{'coefficient': 0,
-        #                      'r^n': 1,
-        #                      'exponent': 0}]
-        #  }
+         }
     ]
 
+    methane_3_optimiser = Optimiser()
+    ### Methane ecp locators
+    methane_3_optimiser.ecp_locators = standard_ecp_locators
+
     ## Orbitals to optimise
-    methane_optimiser.tracked_orbitals = [
-        {'irrep': '4a',
+    methane_3_optimiser.tracked_orbitals = [
+        {'irrep': '1a',
          'spin': 'mos',
-         'reference_energy': -10.923},
-        {'irrep': '3a',
+         'reference_energy': -14.892},
+    ]
+
+    methane_2_optimiser = Optimiser()
+    ### Methane ecp locators
+    methane_2_optimiser.ecp_locators = standard_ecp_locators
+
+    ## Orbitals to optimise
+    methane_2_optimiser.tracked_orbitals = [
+        {'irrep': '1a1',
          'spin': 'mos',
-         'reference_energy': -10.923},
+         'reference_energy': -14.892},
+        {'irrep': '1b2',
+         'spin': 'mos',
+         'reference_energy': -14.892},
+    ]
+
+    methane_2_optimiser.tracked_atom_gradients = [1]
+
+    methane_1_optimiser = Optimiser()
+    ### Methane ecp locators
+    methane_1_optimiser.ecp_locators = standard_ecp_locators
+
+    ## Orbitals to optimise
+    methane_1_optimiser.tracked_orbitals = [
+        {'irrep': '1a',
+         'spin': 'mos',
+         'reference_energy': -14.892},
         {'irrep': '2a',
          'spin': 'mos',
-         'reference_energy': -19.105},
-        # {'irrep': '1a',
-        #  'spin': 'mos',
-        #  'reference_energy': -277.846},
+         'reference_energy': -14.892},
+        {'irrep': '3a',
+         'spin': 'mos',
+         'reference_energy': -14.892},
+    ]
+
+    methane_1_lower_optimiser = Optimiser()
+    ### Methane ecp locators
+    methane_1_lower_optimiser.ecp_locators = standard_ecp_locators
+
+    ## Orbitals to optimise
+    methane_1_lower_optimiser.tracked_orbitals = [
+        {'irrep': '1a',
+         'spin': 'mos',
+         'reference_energy': -25.350},
+        {'irrep': '2a',
+         'spin': 'mos',
+         'reference_energy': -14.892},
+        {'irrep': '3a',
+         'spin': 'mos',
+         'reference_energy': -14.892},
     ]
 
     ethene_optimiser = Optimiser()
     ### Ethene ecp locators
-    ethene_optimiser.ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'h ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
+    ethene_optimiser.ecp_locators = standard_ecp_locators
 
     ## Orbitals to optimise
     ethene_optimiser.tracked_orbitals = [
@@ -215,101 +242,119 @@ def optimise_energy():
 
     ethane_optimiser = Optimiser()
     ### Ethane ecp locators
-    ethane_optimiser.ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'he ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
+    ethane_optimiser.ecp_locators = standard_ecp_locators
 
     ## Orbitals to optimise
     ethane_optimiser.tracked_orbitals = [
-        {'irrep': '3a',
+        {'irrep': '5a',
          'spin': 'mos',
          'reference_energy': -14.028},
-        {'irrep': '4a',
+        {'irrep': '6a',
          'spin': 'mos',
          'reference_energy': -13.328},
-        # {'irrep': '5a',
-        #  'spin': 'mos',
-        #  'reference_energy': -13.328},
+        {'irrep': '7a',
+         'spin': 'mos',
+         'reference_energy': -13.328},
     ]
 
-    propane_c_optimiser = Optimiser()
+    ethane_optimiser.tracked_atom_gradients = [1, 2]
+
+    propane_optimiser = Optimiser()
     ### Propane_c ecp locators
-    propane_c_optimiser.ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'he ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
+    propane_optimiser.ecp_locators = standard_ecp_locators
 
     ## Orbitals to optimise
-    propane_c_optimiser.tracked_orbitals = [
+    propane_optimiser.tracked_orbitals = [
+        # {'irrep': '4b2',
+        #  'spin': 'mos',
+        #  'reference_energy': -9.524},
+        # {'irrep': '1a2',
+        #  'spin': 'mos',
+        #  'reference_energy': -10.609},
+        {'irrep': '4a1',
+         'spin': 'mos',
+         'reference_energy': -9.426},
         {'irrep': '1b1',
          'spin': 'mos',
-         'reference_energy': -10.923},
-        {'irrep': '1a1',
-         'spin': 'mos',
-         'reference_energy': -19.105},
-        # {'irrep': '1 b2',
-        #  'spin': 'mos',
-        #  'reference_energy': -277.846},
+         'reference_energy': -9.106},
     ]
 
     half_ethene_optimiser = Optimiser()
     ### half-Ethene ecp locators
-    half_ethene_optimiser.ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'h ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
+    half_ethene_optimiser.ecp_locators = standard_ecp_locators
 
     ## Orbitals to optimise
     half_ethene_optimiser.tracked_orbitals = [
         # {'irrep': '2b2',
         #  'spin': 'mos',
         #  'reference_energy': 7.0},
-        {'irrep': '1b1',
-         'spin': 'mos',
-         'reference_energy': -10.363},
         {'irrep': '1b2',
          'spin': 'mos',
+         'reference_energy': -10.363},
+        {'irrep': '1b1',
+         'spin': 'mos',
          'reference_energy': -13.771},
+        # {'irrep': '3a1',
+        #  'spin': 'mos',
+        #  'reference_energy': -16.126},
+    ]
+
+    #half_ethene_optimiser.tracked_atom_gradients = [1, 2]
+
+    eclipsed_ethane_optimiser = Optimiser()
+    ### Eclipsed Ethane ecp locators
+    eclipsed_ethane_optimiser.ecp_locators = [
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'c ecp-p',
+         'orbital_descriptor': 'p-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'he ecp-s',
+         'orbital_descriptor': 's-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$basis',
+         'basis_ecp_name': 'c def2-svpr',
+         'orbital_descriptor': '1s',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         }
+    ]
+
+    ## Orbitals to optimise
+    eclipsed_ethane_optimiser.tracked_orbitals = [
         {'irrep': '3a1',
          'spin': 'mos',
-         'reference_energy': -16.126},
+         'reference_energy': -14.008},
+        {'irrep': '1e',
+         'spin': 'mos',
+         'reference_energy': -13.284},
+        {'irrep': '1e',
+         'spin': 'mos',
+         'reference_energy': -13.284},
+    ]
+
+    propane_c_optimiser = Optimiser()
+    ### Propane_c ecp locators
+    propane_c_optimiser.ecp_locators = standard_ecp_locators
+
+    ## Orbitals to optimise
+    propane_c_optimiser.tracked_orbitals = [
+        {'irrep': '1b2',
+         'spin': 'mos',
+         'reference_energy': -14.892},
+        {'irrep': '1a1',
+         'spin': 'mos',
+         'reference_energy': -14.892},
+        # {'irrep': '1 b2',
+        #  'spin': 'mos',
+        #  'reference_energy': -277.846},
     ]
 
 
@@ -320,10 +365,29 @@ def optimise_energy():
 
     # My ethane ecp
     # initial_guesses = numpy.array([-2.8056200103, 0.6, 3.0, 5.5])
-    initial_guesses = numpy.array([-2.090443639, 0.3974474906, 35.58826369, 15.19887795])
+    #initial_guesses = numpy.array([-2.090443639, 0.3974474906, 35.58826369, 15.19887795, 0.4, 1.0])
+    # methane 2 pot initial
+    # initial_guesses = numpy.array([-4.8484, 0.7062, -0.317, 0.3294])
+    # initial_guesses = numpy.array([-3.5, 0.8, -0.3, 0.35])
+    # initial_guesses = numpy.array([-5.66, 0.88, -0.19, 0.25])
+    #initial_guesses = numpy.array([-4.42, 1.86, 0.57, 0.62])
+
+    # Methane 1 pot
+    # initial_guesses = numpy.array([-5.25, 2.04, 4.17, 0.43])
+    # Methane 1 pot lower
+    #initial_guesses = numpy.array([-5.19, 1.81, 0.27, 0.75])
 
     # basis set 4 (ethene)
     # initial_guesses = numpy.array([-3.9096200103, 0.6244618784, 1.5, 0.5])
+    # half pseudo ethene
+    initial_guesses = numpy.array([-6.45, 0.90, 1.14, 1.63])
+    # initial opt
+    # initial_guesses = numpy.array([-8.26, 1.68, -0.95, 0.48])
+    # post bopt sopt
+    #initial_guesses = numpy.array([-7.2, 1.41, -0.3, 2.1])
+
+    # propane guesses
+    # initial_guesses = numpy.array([10.27, 0.29, 100.38, 1.3])
 
     # base guess
     # initial_guesses = numpy.array([0.1, 0.1, 0.1, 0.1])
@@ -333,11 +397,18 @@ def optimise_energy():
 
     # optimised_value = ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     # optimised_value = ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = methane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    #optimised_value = eclipsed_ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = propane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     # optimised_value = propane_c_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
     optimised_value = half_ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
 
+    # optimised_value = methane_1_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = methane_1_lower_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = methane_2_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+    # optimised_value = methane_3_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
+
     print(optimised_value)
+
 
 optimise_energy()
 

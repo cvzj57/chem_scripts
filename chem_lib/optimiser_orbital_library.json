@@ -1,0 +1,137 @@
+{
+  "methane_c1_3_potentials": [
+    {
+      "irrep": "1a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    }
+  ],
+  "methane_c1_2_potentials": [
+    {
+      "irrep": "1a1",
+      "spin": "mos",
+      "reference_energy": -14.892
+    },
+    {
+      "irrep": "1b2",
+      "spin": "mos",
+      "reference_energy": -14.892
+    }
+  ],
+  "methane_c1_1_potentials": [
+    {
+      "irrep": "1a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    },
+    {
+      "irrep": "2a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    },
+    {
+      "irrep": "3a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    }
+  ],
+  "methane_c1_1_potential_lower": [
+    {
+      "irrep": "1a",
+      "spin": "mos",
+      "reference_energy": -25.350
+    },
+    {
+      "irrep": "2a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    },
+    {
+      "irrep": "3a",
+      "spin": "mos",
+      "reference_energy": -14.892
+    }
+  ],
+  "ethene_c1_optimiser": [
+    {
+      "irrep": "2a\"",
+      "spin": "alpha",
+      "reference_energy": -6.630
+    },
+    {
+      "irrep": "1a\"",
+      "spin": "alpha",
+      "reference_energy": -14.512
+    }
+  ],
+  "ethane_optimiser": [
+    {
+      "irrep": "5a",
+      "spin": "mos",
+      "reference_energy": -14.028
+    },
+    {
+      "irrep": "6a",
+      "spin": "mos",
+      "reference_energy": -13.328
+    },
+    {
+      "irrep": "7a",
+      "spin": "mos",
+      "reference_energy": -13.328
+    }
+  ],
+  "propane_optimiser": [
+    {
+      "irrep": "4a1",
+      "spin": "mos",
+      "reference_energy": -9.426
+    },
+    {
+      "irrep": "1b1",
+      "spin": "mos",
+      "reference_energy": -9.106
+    }
+  ],
+  "half_ethene_optimiser": [
+    {
+      "irrep": "1b2",
+      "spin": "mos",
+      "reference_energy": -10.363
+    },
+    {
+      "irrep": "1b1",
+      "spin": "mos",
+      "reference_energy": -13.771
+    }
+  ],
+  "eclipsed_ethane_optimiser": [
+    {
+      "irrep": "3a1",
+      "spin": "mos",
+      "reference_energy": -14.008
+    },
+    {
+      "irrep": "1e",
+      "spin": "mos",
+      "reference_energy": -13.284
+    },
+    {
+      "irrep": "1e",
+      "spin": "mos",
+      "reference_energy": -13.284
+    }
+  ],
+  "propane_c_optimiser": [
+    {
+      "irrep": "1b2",
+      "spin": "mos",
+      "reference_energy": -14.892
+    },
+    {
+      "irrep": "1a1",
+      "spin": "mos",
+      "reference_energy": -14.892
+    }
+  ]
+}
