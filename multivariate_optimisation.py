@@ -7,22 +7,156 @@ import scipy.optimize
 import numpy
 import json
 
+empty_setup_file = {
+    'calc_folder_path': '',
+    'ecp_locators': [
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'c ecp-p',
+         'orbital_descriptor': 'p-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         },
+        {'line_type': '$ecp',
+         'basis_ecp_name': 'he ecp-s',
+         'orbital_descriptor': 's-f',
+         'functions_list': [{'coefficient': 0,
+                             'r^n': 1,
+                             'exponent': 0}]
+         }
+    ],
+    'tracked_orbitals': [
+        {'irrep': '1a'},
+        {'spin': 'mos'},
+        {'reference_energy': 0.0},
+    ],
+    # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
+    'initial_guesses': [0.1, 0.1, 0.1, 0.1]
+}
+
 
 class Optimiser:
     """Contains functions that let the user optimise pseudo-potential parameters based on reference energy."""
     def __init__(self):
         self.reference_E = None
+        self.setup_file_name = 'opt.moo'
         self.basis = BasisControl()
         self.gradient = GradientControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.calculation_type = 'dscf'
-        self.calc_folder_path = 'pseudo_optimisation'
+        self.calc_folder_path = None
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
-        self.ecp_locators = []
+        self.ecp_locators = []  # initial guesses for optimiser
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
-        with open('chem_lib/optimiser_orbital_library.json', 'r') as json_file:
+        self.initial_guesses = None
+        with open(os.path.dirname(os.path.realpath(__file__))+'/chem_lib/optimiser_orbital_library.json', 'r') as json_file:
             self.orbital_library = json.load(json_file)
+
+    def run(self):
+        print(
+            '''
+            #######################################
+             The Multi-Orbital Optimiser   (___)
+                                          '(o o)`______
+                      (or MOO)              ../ ` # # \`~   
+                                              \ ,___, /
+                                              //    //  
+                                              ^^    ^^  
+            #######################################
+            ''')
+        opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
+        if not os.path.isfile(opt_data_path):
+            print('No moo file, running setup...')
+            self.setup_menu()
+        else:
+            print('moo file found.')
+        with open(opt_data_path, 'r') as opt_data_file:
+            optdata = json.load(opt_data_file)
+        opt_data_file.close()
+        self.tracked_orbitals = optdata['tracked_orbitals']
+        self.calc_folder_path = optdata['calc_folder_path']
+        self.ecp_locators = optdata['ecp_locators']
+        self.initial_guesses = numpy.array(optdata['initial_guesses'])
+        if input('Run now? y/n: ') == 'y':
+            optimised_value = self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
+            print(optimised_value)
+
+    def setup_menu(self):
+        setup_file = empty_setup_file
+        setup_file['calc_folder_path'] = input('Enter calc folder path: ')
+
+        print('1. Enter tracked orbital key')
+        print('2. Show orbital key library')
+        print('3. Generate empty tracked orbital file')
+        orbital_selection_made = False
+        initial_guess_selection_made = False
+        while orbital_selection_made is False:
+            try:
+                orbital_menu_choice = int(input('Enter choice: '))
+                if orbital_menu_choice == 1:
+                    orbital_key = input('Enter key: ')
+                    try:
+                        setup_file['tracked_orbitals'] = self.orbital_library['orbital_list'][orbital_key]
+                        orbital_selection_made = True
+                    except KeyError:
+                        print('Not a real key')
+                elif orbital_menu_choice == 2:
+                    sorted_keys = sorted(list(self.orbital_library['orbital_list'].keys()))
+                    for id_no, key in enumerate(sorted_keys):
+                        print("%s: %s" % (id_no, sorted_keys[id_no]))
+                    try:
+                        chosen_id = int(input('Enter ID: '))
+                        setup_file['tracked_orbitals'] = self.orbital_library['orbital_list'][sorted_keys[chosen_id]]
+                    except Exception as error:
+                        print('Not a real key... ', error)
+                    orbital_selection_made = True
+                elif orbital_menu_choice == 3:
+                    orbital_selection_made = True
+            except Exception as error:
+                print("That's not a choice!", error)
+
+        print('1. Enter initial guess key / #')
+        print('2. Print initial guess library')
+        print("3. Don't care (all values 0.1)")
+        while initial_guess_selection_made is False:
+            try:
+                guess_menu_choice = int(input('Enter choice: '))
+                if guess_menu_choice == 1:
+                    guess_key = input('Enter key: ')
+                    try:
+                        setup_file['initial_guesses'] = self.orbital_library['initial_guess_list'][int(guess_key)]['guesses']
+                    except KeyError:
+                        print('Not a real key')
+                    initial_guess_selection_made = True
+                elif guess_menu_choice == 2:
+                    for key, guess in enumerate(self.orbital_library['initial_guess_list']):
+                        print("%s: %s \n    %s" % (key, guess['description'], guess['guesses']))
+                    guess_key = input('Enter key: ')
+                    try:
+                        setup_file['initial_guesses'] = self.orbital_library['initial_guess_list'][int(guess_key)][
+                            'guesses']
+                    except KeyError:
+                        print('Not a real key')
+                    initial_guess_selection_made = True
+                elif guess_menu_choice == 3:
+                    initial_guess_selection_made = True
+            except ValueError:
+                print("That's not a choice!")
+        if input('Add carbon s? y/n: ') == 'y':
+            setup_file['ecp_locators'].append(
+                {'line_type': '$ecp',
+                 'basis_ecp_name': 'c ecp-p',
+                 'orbital_descriptor': 's-f',
+                 'functions_list': [{'coefficient': 0,
+                                     'r^n': 1,
+                                     'exponent': 0}]
+                 })
+
+        with open(os.path.join(setup_file['calc_folder_path'], self.setup_file_name), 'w') as outfile:
+            json.dump(setup_file, outfile, sort_keys=True, indent=2)
+        outfile.close()
+        print("Whaddaya know, you've got potential.")
 
     def read_result(self, energy_type=None, orbital_to_read=None):
         """Updates basis file with new coeff/exp value, runs the calculation and reads either the
@@ -146,270 +280,7 @@ class Optimiser:
                                        )
 
 
-def optimise_energy():
-
-    standard_ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'he ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
-
-    methane_3_optimiser = Optimiser()
-    ### Methane ecp locators
-    methane_3_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    methane_3_optimiser.tracked_orbitals = [
-        {'irrep': '1a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-    ]
-
-    methane_2_optimiser = Optimiser()
-    ### Methane ecp locators
-    methane_2_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    methane_2_optimiser.tracked_orbitals = [
-        {'irrep': '1a1',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        {'irrep': '1b2',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-    ]
-
-    methane_2_optimiser.tracked_atom_gradients = [1]
-
-    methane_1_optimiser = Optimiser()
-    ### Methane ecp locators
-    methane_1_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    methane_1_optimiser.tracked_orbitals = [
-        {'irrep': '1a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        {'irrep': '2a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        {'irrep': '3a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-    ]
-
-    methane_1_lower_optimiser = Optimiser()
-    ### Methane ecp locators
-    methane_1_lower_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    methane_1_lower_optimiser.tracked_orbitals = [
-        {'irrep': '1a',
-         'spin': 'mos',
-         'reference_energy': -25.350},
-        {'irrep': '2a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        {'irrep': '3a',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-    ]
-
-    ethene_optimiser = Optimiser()
-    ### Ethene ecp locators
-    ethene_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    ethene_optimiser.tracked_orbitals = [
-        {'irrep': '2a"',
-         'spin': 'alpha',
-         'reference_energy': -6.630},
-        {'irrep': '1a"',
-         'spin': 'alpha',
-         'reference_energy': -14.512},
-    ]
-
-    ethane_optimiser = Optimiser()
-    ### Ethane ecp locators
-    ethane_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    ethane_optimiser.tracked_orbitals = [
-        {'irrep': '5a',
-         'spin': 'mos',
-         'reference_energy': -14.028},
-        {'irrep': '6a',
-         'spin': 'mos',
-         'reference_energy': -13.328},
-        {'irrep': '7a',
-         'spin': 'mos',
-         'reference_energy': -13.328},
-    ]
-
-    ethane_optimiser.tracked_atom_gradients = [1, 2]
-
-    propane_optimiser = Optimiser()
-    ### Propane_c ecp locators
-    propane_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    propane_optimiser.tracked_orbitals = [
-        # {'irrep': '4b2',
-        #  'spin': 'mos',
-        #  'reference_energy': -9.524},
-        # {'irrep': '1a2',
-        #  'spin': 'mos',
-        #  'reference_energy': -10.609},
-        {'irrep': '4a1',
-         'spin': 'mos',
-         'reference_energy': -9.426},
-        {'irrep': '1b1',
-         'spin': 'mos',
-         'reference_energy': -9.106},
-    ]
-
-    half_ethene_optimiser = Optimiser()
-    ### half-Ethene ecp locators
-    half_ethene_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    half_ethene_optimiser.tracked_orbitals = [
-        # {'irrep': '2b2',
-        #  'spin': 'mos',
-        #  'reference_energy': 7.0},
-        {'irrep': '1b2',
-         'spin': 'mos',
-         'reference_energy': -10.363},
-        {'irrep': '1b1',
-         'spin': 'mos',
-         'reference_energy': -13.771},
-        # {'irrep': '3a1',
-        #  'spin': 'mos',
-        #  'reference_energy': -16.126},
-    ]
-
-    #half_ethene_optimiser.tracked_atom_gradients = [1, 2]
-
-    eclipsed_ethane_optimiser = Optimiser()
-    ### Eclipsed Ethane ecp locators
-    eclipsed_ethane_optimiser.ecp_locators = [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'he ecp-s',
-         'orbital_descriptor': 's-f',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         },
-        {'line_type': '$basis',
-         'basis_ecp_name': 'c def2-svpr',
-         'orbital_descriptor': '1s',
-         'functions_list': [{'coefficient': 0,
-                             'r^n': 1,
-                             'exponent': 0}]
-         }
-    ]
-
-    ## Orbitals to optimise
-    eclipsed_ethane_optimiser.tracked_orbitals = [
-        {'irrep': '3a1',
-         'spin': 'mos',
-         'reference_energy': -14.008},
-        {'irrep': '1e',
-         'spin': 'mos',
-         'reference_energy': -13.284},
-        {'irrep': '1e',
-         'spin': 'mos',
-         'reference_energy': -13.284},
-    ]
-
-    propane_c_optimiser = Optimiser()
-    ### Propane_c ecp locators
-    propane_c_optimiser.ecp_locators = standard_ecp_locators
-
-    ## Orbitals to optimise
-    propane_c_optimiser.tracked_orbitals = [
-        {'irrep': '1b2',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        {'irrep': '1a1',
-         'spin': 'mos',
-         'reference_energy': -14.892},
-        # {'irrep': '1 b2',
-        #  'spin': 'mos',
-        #  'reference_energy': -277.846},
-    ]
-
-
-    # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
-
-    # Paola's ethane ecp
-    # initial_guesses = numpy.array([-2.8056200103, 0.6244618784275526, 0.5, 1.5])
-
-    # My ethane ecp
-    # initial_guesses = numpy.array([-2.8056200103, 0.6, 3.0, 5.5])
-    #initial_guesses = numpy.array([-2.090443639, 0.3974474906, 35.58826369, 15.19887795, 0.4, 1.0])
-    # methane 2 pot initial
-    # initial_guesses = numpy.array([-4.8484, 0.7062, -0.317, 0.3294])
-    # initial_guesses = numpy.array([-3.5, 0.8, -0.3, 0.35])
-    # initial_guesses = numpy.array([-5.66, 0.88, -0.19, 0.25])
-    #initial_guesses = numpy.array([-4.42, 1.86, 0.57, 0.62])
-
-    # Methane 1 pot
-    # initial_guesses = numpy.array([-5.25, 2.04, 4.17, 0.43])
-    # Methane 1 pot lower
-    #initial_guesses = numpy.array([-5.19, 1.81, 0.27, 0.75])
-
-    # basis set 4 (ethene)
-    # initial_guesses = numpy.array([-3.9096200103, 0.6244618784, 1.5, 0.5])
-    # half pseudo ethene
-    initial_guesses = numpy.array([-6.45, 0.90, 1.14, 1.63])
-    # initial opt
-    # initial_guesses = numpy.array([-8.26, 1.68, -0.95, 0.48])
-    # post bopt sopt
-    #initial_guesses = numpy.array([-7.2, 1.41, -0.3, 2.1])
-
-    # propane guesses
-    # initial_guesses = numpy.array([10.27, 0.29, 100.38, 1.3])
-
-    # base guess
-    # initial_guesses = numpy.array([0.1, 0.1, 0.1, 0.1])
-
-    # 4 orbital base guess
-    # initial_guesses = numpy.array([-0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-
-    # optimised_value = ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    #optimised_value = eclipsed_ethane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = propane_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = propane_c_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    optimised_value = half_ethene_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-
-    # optimised_value = methane_1_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = methane_1_lower_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = methane_2_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-    # optimised_value = methane_3_optimiser.run_multivariate_orbital_optimisation(initial_guesses)
-
-    print(optimised_value)
-
-
-optimise_energy()
-
+if __name__ == "__main__":
+    optimiser = Optimiser()
+    optimiser.run()
 

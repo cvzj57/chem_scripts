@@ -266,15 +266,15 @@ def main():
 
     exp_r = handler.calculate_expected_r()
 
-    pp_exponent = 0.295
+    #pp_exponent = 0.295
     # pp_exponent = 0.34697
     # pp_exponent = 10.0
     # pp_exponent = 0.1492751032
     # pp_exponent = 4.0
-    # pp_exponent = 0.6245
+    pp_exponent = 0.6245
     # pp_exponent = 1.2489
 
-    # pp_exponent = float(minimize(handler.calculate_mo_overlap, pp_exponent).x)
+    #pp_exponent = float(minimize(handler.calculate_mo_overlap, numpy.array([pp_exponent])).x)
     print('pp exp %s' % pp_exponent)
 
     mo_overlap = handler.calculate_mo_overlap(pp_exponent, as_minimisation_arg=False)
