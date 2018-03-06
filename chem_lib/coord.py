@@ -17,6 +17,7 @@ class CoordControl:
         self.no_potential_sets_per_atom = 3
         self.atom_potential_set_distance = 0.5
         self.potential_set_split_distance = 0.25
+        self.pseudo_element = 'he'
 
     @staticmethod
     def check_is_int(s):
@@ -86,6 +87,17 @@ class CoordControl:
 
         var_file.close()
 
+    def parse_coord_list(self, raw_input):
+        splitted = raw_input.split(',')
+        final_coord_list = []
+        for split_input in splitted:
+            if '-' in split_input:
+                input_range = split_input.split('-')
+                final_coord_list.append(range(int(input_range[0]), int(input_range[1])))
+            else:
+                final_coord_list.append(int(split_input))
+        return final_coord_list
+
     def delete_hydrogen_atoms(self):
         var_file = open(self.coord_file_path, 'r')
         var_file_data = var_file.readlines()
@@ -153,7 +165,9 @@ class CoordControl:
 
     def order_atoms_by_distance_from(self, central_atom_index, element=None):
 
-        if element:
+        if element == '!h':
+            coord_list = (item for item in self.coord_list if item["el"] != 'h')
+        elif element:
             coord_list = (item for item in self.coord_list if item["el"] == element)
         else:
             coord_list = self.coord_list
@@ -182,7 +196,7 @@ class CoordControl:
                            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-    def pseudopotentialise_molecule(self, sysargs=None):
+    def pseudopotentialise_molecule(self, sysargs=None, add_primary_vector_potentials_as_coords=False):
         """Creates sets of pseudo-potentials for all C atoms a la CH3 radical."""
 
         # Find atoms to replace
@@ -206,9 +220,15 @@ class CoordControl:
             distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
 
             if len(distanced_carbon_list) == 1:
-                primary_vector = self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#'])
+                primary_vector = None
+                for non_c_atom in distanced_atom_list[1:4]:
+                    if non_c_atom['el'] != 'h':
+                        primary_vector = self.vectorise_atom(non_c_atom['#']) - self.vectorise_atom(atom['#'])
+                if primary_vector is None:
+                    primary_vector = self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#'])
             else:
                 primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom['#'])
+
             normal_vector = numpy.cross(
                 self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
                 self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
@@ -238,10 +258,14 @@ class CoordControl:
                 relative_potential_vectors.append(pps_positive)
                 relative_potential_vectors.append(pps_negative)
 
+            if add_primary_vector_potentials_as_coords is False:
+                del relative_potential_vectors[0]
+                del relative_potential_vectors[0]
+
             # potential coords are still relative to their atom, now make them real.
             for vector in relative_potential_vectors:
                 potential_coords_list.append(
-                    {'#': 0, 'el': 'h', 'x': vector[0]+atom['x'], 'y': vector[1]+atom['y'], 'z': vector[2]+atom['z']},
+                    {'#': 0, 'el': self.pseudo_element, 'x': vector[0]+atom['x'], 'y': vector[1]+atom['y'], 'z': vector[2]+atom['z']},
                 )
 
         # Now add potentials to coord list, after removing the 'real' hydrogen atoms.
@@ -265,7 +289,7 @@ class CoordControl:
         else:
             atoms_to_replace = (item for item in self.coord_list if item["el"] == 'c')
             deletion_list = (item for item in self.coord_list if item["el"] == 'h')
-        print('Pseudo-potentialising carbon atoms %s ...' % [atom['#'] for atom in atoms_to_replace])
+        print('Pseudo-potentialising atoms %s ...' % [atom['#'] for atom in atoms_to_replace])
 
         # Option to place a potential on the *opposite* side of the carbon as well.
         dipolar_potentials = False
@@ -289,7 +313,7 @@ class CoordControl:
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(
-                {'#': 0, 'el': 'he',
+                {'#': 0, 'el': self.pseudo_element,
                  'x': vector_c_to_new_pp[0] + distanced_carbon_list[0]['x'],
                  'y': vector_c_to_new_pp[1] + distanced_carbon_list[0]['y'],
                  'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
@@ -297,7 +321,7 @@ class CoordControl:
             if dipolar_potentials is True:
                 # Add to carbon coords to get new pp coords.
                 potential_coords_list.append(
-                    {'#': 0, 'el': 'he',
+                    {'#': 0, 'el': self.pseudo_element,
                      'x': vector_c_to_new_dipole_pp[0] + distanced_carbon_list[0]['x'],
                      'y': vector_c_to_new_dipole_pp[1] + distanced_carbon_list[0]['y'],
                      'z': vector_c_to_new_dipole_pp[2] + distanced_carbon_list[0]['z']},
@@ -307,6 +331,7 @@ class CoordControl:
         self.delete_specified_atoms(deletion_list)
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
+
 
 if __name__ == "__main__":
     control = CoordControl()

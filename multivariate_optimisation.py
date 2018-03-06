@@ -266,17 +266,20 @@ class Optimiser:
         )
 
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
-        pp_bounds = [(None, 0.0), (0.001, None), (None, None), (0.001, None)]
-        # pp_bounds = [(None, 0.0), (0.001, None), (0.0, None), (0.001, None), (0.0, None), (0.001, None)]
+        pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50)]
+        pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
         # Only SLSQP handles constraints and bounds.
         return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
-                                       tol=0.0001,
+                                       options={'eps': 0.001,
+                                                'maxiter': 1000},
+                                       tol=0.0000000001,
                                        bounds=pp_bounds,
-                                       method='Nelder-Mead',
+                                       # method='Nelder-Mead',
                                        # method='Powell',
                                        # method='CG',
                                        # method='BFGS',
-                                       # method='SLSQP',
+                                       method='SLSQP',
+                                       # method='COBYLA',
                                        )
 
 
