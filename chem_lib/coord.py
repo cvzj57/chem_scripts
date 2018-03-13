@@ -17,7 +17,8 @@ class CoordControl:
         self.no_potential_sets_per_atom = 3
         self.atom_potential_set_distance = 0.5
         self.potential_set_split_distance = 0.25
-        self.pseudo_element = 'he'
+        self.sp3_pseudo_element = 'li'
+        self.sp2_pseudo_element = 'he'
         self.add_primary_vector_potentials_as_coords = True
         self.bond_deciding_distance = 3.7
 
@@ -206,15 +207,19 @@ class CoordControl:
 
         sp2_replacement_list = []
         sp2_deletion_list = []
+        sp2_carbon_list = []
         sp3_replacement_list = []
         sp3_deletion_list = []
+        sp3_carbon_list =[]
         carbon_atoms = [atom for atom in self.coord_list if atom["el"] == 'c']
 
         # Sort through carbons to decide what needs potentialising. Find atoms bonded to each carbon
         for atom in carbon_atoms:
             distanced_atoms = self.order_atoms_by_distance_from(atom['#'])
-            nearest_4_distances = [self.measure_atom_atom_dist(atom['#'], distanced_atom['#']) for distanced_atom in distanced_atoms[1:5]]
-            bonded_distances = [less_than_distance for less_than_distance in nearest_4_distances if less_than_distance < self.bond_deciding_distance]
+            nearest_4_distances = [self.measure_atom_atom_dist(atom['#'], distanced_atom['#']) for distanced_atom in
+                                   distanced_atoms[1:5]]
+            bonded_distances = [less_than_distance for less_than_distance in nearest_4_distances if
+                                less_than_distance < self.bond_deciding_distance]
 
             # if 3 bonded atoms, may be sp2, check if they're hydrogens
             if len(bonded_distances) == 3:
@@ -222,6 +227,7 @@ class CoordControl:
                                                  distanced_atom['el'] == 'h' and self.measure_atom_atom_dist(atom['#'], distanced_atom['#']) < self.bond_deciding_distance]
                 sp2_deletion_list.extend([hydrogen['#'] for hydrogen in hydrogens_bonded_to_this_atom])
                 sp2_replacement_list.append(str(atom['#']))
+                sp2_carbon_list.append(atom)
 
             # if 4 bonded atoms, may be sp3, check if they're hydrogens
             elif len(bonded_distances) == 4:
@@ -230,20 +236,21 @@ class CoordControl:
                 if len(hydrogens_bonded_to_this_atom) == 3:
                     sp3_replacement_list.extend([str(hydrogen['#']) for hydrogen in hydrogens_bonded_to_this_atom])
                     sp3_deletion_list.extend([hydrogen['#'] for hydrogen in hydrogens_bonded_to_this_atom])
+                    sp3_carbon_list.append(atom)
+
+        with open(os.path.join('pseudification.log'), 'w') as var_file:
+            var_file.writelines('sp2 carbon indices: %s \n sp3 carbon indices: %s' % ([str(carbon['#']) for carbon in
+                                                                                       sp2_carbon_list],
+                                                                                      [str(carbon['#']) for carbon in
+                                                                                       sp3_carbon_list]))
 
         sp2_coord_command = 'mn sp2 %s' % (','.join(sp2_replacement_list))
         print("sp2 command: %s" % sp2_coord_command)
         sp3_coord_command = 'mn sp3 %s' % (','.join(sp3_replacement_list))
         print("sp3 command: %s" % sp3_coord_command)
 
-        self.pseudopotentialise_ethane_like_molecule(sp3_coord_command.split())
-        self.pseudopotentialise_molecule(sp2_coord_command.split())
-        # import time
-        # time.sleep(3)
-        # print(str(sp2_deletion_list + sp3_deletion_list))
-
-        import itertools
-        big_delete = list(itertools.chain(sp2_deletion_list, sp3_deletion_list))
+        self.pseudopotentialise_ethane_like_molecule(sp3_coord_command.split(), execute_deletion=False)
+        self.pseudopotentialise_molecule(sp2_coord_command.split(), execute_deletion=False)
 
         self.delete_specified_atoms(sp2_deletion_list + sp3_deletion_list)
 
@@ -314,7 +321,7 @@ class CoordControl:
             # potential coords are still relative to their atom, now make them real.
             for vector in relative_potential_vectors:
                 potential_coords_list.append(
-                    {'#': 0, 'el': self.pseudo_element, 'x': vector[0]+atom['x'], 'y': vector[1]+atom['y'], 'z': vector[2]+atom['z']},
+                    {'#': 0, 'el': self.sp2_pseudo_element, 'x': vector[0]+atom['x'], 'y': vector[1]+atom['y'], 'z': vector[2]+atom['z']},
                 )
 
         # Now add potentials to coord list, after removing the 'real' hydrogen atoms.
@@ -360,7 +367,7 @@ class CoordControl:
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(
-                {'#': 0, 'el': self.pseudo_element,
+                {'#': 0, 'el': self.sp3_pseudo_element,
                  'x': vector_c_to_new_pp[0] + distanced_carbon_list[0]['x'],
                  'y': vector_c_to_new_pp[1] + distanced_carbon_list[0]['y'],
                  'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
@@ -368,7 +375,7 @@ class CoordControl:
             if dipolar_potentials is True:
                 # Add to carbon coords to get new pp coords.
                 potential_coords_list.append(
-                    {'#': 0, 'el': self.pseudo_element,
+                    {'#': 0, 'el': self.sp3_pseudo_element,
                      'x': vector_c_to_new_dipole_pp[0] + distanced_carbon_list[0]['x'],
                      'y': vector_c_to_new_dipole_pp[1] + distanced_carbon_list[0]['y'],
                      'z': vector_c_to_new_dipole_pp[2] + distanced_carbon_list[0]['z']},
