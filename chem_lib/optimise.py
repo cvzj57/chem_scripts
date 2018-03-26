@@ -189,16 +189,25 @@ class BasisControl:
     def run_dscf(add_to_log=False, file_path=''):
         print("running %s dscf, add to log is %s" % (file_path, add_to_log))
         if add_to_log == True:
-            command = 'dscf > calc.log'
+            command = 'dscf > dscf.log'
         else:
             command = 'dscf'
+        subprocess.call(command, shell=True, cwd=file_path)
+
+    @staticmethod
+    def run_escf(add_to_log=False, file_path=''):
+        print("running %s escf, add to log is %s" % (file_path, add_to_log))
+        if add_to_log == True:
+            command = 'escf > escf.log'
+        else:
+            command = 'escf'
         subprocess.call(command, shell=True, cwd=file_path)
 
     @staticmethod
     def run_ridft(add_to_log=False, file_path=''):
         print("running %s ridft, add to log is %s" % (file_path, add_to_log))
         if add_to_log == True:
-            command = 'ridft > calc.log'
+            command = 'ridft > ridft.log'
         else:
             command = 'ridft'
         subprocess.call(command, shell=True)

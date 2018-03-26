@@ -1,0 +1,215 @@
+{
+  "orbital_list": {
+    "methane_c1_3_potentials": [
+      {
+        "irrep": "1a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      }
+    ],
+    "methane_c1_2_potentials": [
+      {
+        "irrep": "1a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      },
+      {
+        "irrep": "2a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      }
+    ],
+    "methane_c1_1_potentials": [
+      {
+        "irrep": "1a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      },
+      {
+        "irrep": "2a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      },
+      {
+        "irrep": "3a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      }
+    ],
+    "methane_c1_1_potential_lower": [
+      {
+        "irrep": "1a",
+        "spin": "mos",
+        "reference_energy": -25.350
+      },
+      {
+        "irrep": "2a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      },
+      {
+        "irrep": "3a",
+        "spin": "mos",
+        "reference_energy": -14.892
+      }
+    ],
+    "ethene_c1_optimiser": [
+      {
+        "irrep": "2a\"",
+        "spin": "alpha",
+        "reference_energy": -6.630
+      },
+      {
+        "irrep": "1a\"",
+        "spin": "alpha",
+        "reference_energy": -14.512
+      }
+    ],
+    "ethane_optimiser": [
+      {
+        "irrep": "5a",
+        "spin": "mos",
+        "reference_energy": -14.028
+      },
+      {
+        "irrep": "6a",
+        "spin": "mos",
+        "reference_energy": -13.328
+      },
+      {
+        "irrep": "7a",
+        "spin": "mos",
+        "reference_energy": -13.328
+      }
+    ],
+    "propane_optimiser": [
+      {
+        "irrep": "4a1",
+        "spin": "mos",
+        "reference_energy": -9.426
+      },
+      {
+        "irrep": "1b1",
+        "spin": "mos",
+        "reference_energy": -9.106
+      },
+      {
+        "irrep": "4b2",
+        "spin": "mos",
+        "reference_energy": -9.524
+      },
+      {
+        "irrep": "1a2",
+        "spin": "mos",
+        "reference_energy": -10.609
+      }
+    ],
+    "half_ethene_optimiser": [
+      {
+        "irrep": "1b2",
+        "spin": "mos",
+        "reference_energy": -10.363
+      },
+      {
+        "irrep": "1b1",
+        "spin": "mos",
+        "reference_energy": -13.771
+      }
+    ],
+    "eclipsed_ethane_optimiser": [
+      {
+        "irrep": "3a1",
+        "spin": "mos",
+        "reference_energy": -14.008
+      },
+      {
+        "irrep": "1e",
+        "spin": "mos",
+        "reference_energy": -13.284
+      },
+      {
+        "irrep": "1e",
+        "spin": "mos",
+        "reference_energy": -13.284
+      }
+    ],
+    "propane_c_optimiser": [
+      {
+        "irrep": "1b2",
+        "spin": "mos",
+        "reference_energy": -14.892
+      },
+      {
+        "irrep": "1a1",
+        "spin": "mos",
+        "reference_energy": -14.892
+      }
+    ]
+  },
+  "initial_guess_list":[
+    {
+      "description": "basis set 4 (ethene)",
+      "guesses": [-3.9096200103, 0.6244618784, 1.5, 0.5]
+    },
+    {
+      "description": "half pseudo ethene",
+      "guesses": [-6.45, 0.90, 1.14, 1.63]
+    },
+    {
+      "description": "no s primitives 1",
+      "guesses": [-8.26, 1.68, -0.95, 0.48]
+    },
+    {
+      "description": "no s primitives 2",
+      "guesses": [-7.2, 1.41, -0.3, 2.1]
+    },
+    {
+      "description": "Paola's ethane ecp",
+      "guesses": [-2.8056200103, 0.6244618784275526, 0.5, 1.5]
+    },
+    {
+      "description": "my ethane ecp 1",
+      "guesses": [-2.8056200103, 0.6, 3.0, 5.5]
+    },
+    {
+      "description": "my ethane ecp 2",
+      "guesses": [-2.090443639, 0.3974474906, 35.58826369, 15.0]
+    },
+    {
+      "description": "eclipsed ethane ecp",
+      "guesses": [-2.095, 0.395, 38.505, 14.832]
+    },
+    {
+      "description": "methane 1 potential",
+      "guesses": [-5.25, 2.04, 4.17, 0.43]
+    },
+    {
+      "description": "methane 1 potential lower occ",
+      "guesses": [-5.19, 1.81, 0.27, 0.75]
+    },
+    {
+      "description": "methane 2 potential 1",
+      "guesses": [-4.8484, 0.7062, -0.317, 0.3294]
+    },
+    {
+      "description": "methane 2 potential 2",
+      "guesses": [-3.5, 0.8, -0.3, 0.35]
+    },
+    {
+      "description": "methane 2 potential 3",
+      "guesses": [-5.66, 0.88, -0.19, 0.25]
+    },
+    {
+      "description": "methane 2 potential 4",
+      "guesses": [-4.42, 1.86, 0.57, 0.62]
+    },
+    {
+      "description": "propane guess",
+      "guesses": [10.27, 0.29, 100.38, 1.3]
+    },
+    {
+      "description": "propane top 4",
+      "guesses": [0.0, 0.0, 8.8, 1.9]
+    }
+  ]
+}
