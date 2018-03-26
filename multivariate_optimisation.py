@@ -9,6 +9,8 @@ import json
 
 empty_setup_file = {
     'calc_folder_path': '',
+    'optimise_with_orbitals': True,
+    'optimise_with_total_energy': False,
     'ecp_locators': [
         {'line_type': '$ecp',
          'basis_ecp_name': 'c ecp-p',
@@ -25,30 +27,37 @@ empty_setup_file = {
                              'exponent': 0}]
          }
     ],
-    'tracked_orbitals': [
-        {'irrep': '1a'},
-        {'spin': 'mos'},
-        {'reference_energy': 0.0},
+    'tracked_orbitals': [{
+        'irrep': '1a',
+        'spin': 'mos',
+        'reference_energy': 0.0
+    },
     ],
+    'tracked_total': 0.0,
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
     'initial_guesses': [0.1, 0.1, 0.1, 0.1]
 }
 
 
 class Optimiser:
-    """Contains functions that let the user optimise pseudo-potential parameters based on reference energy."""
+    """Contains functions that let the user optimise pseudo-potential parameters based on reference energies."""
     def __init__(self):
-        self.reference_E = None
+        # generic setup stuff
         self.setup_file_name = 'opt.moo'
         self.basis = BasisControl()
         self.gradient = GradientControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
         self.calculation_type = 'dscf'
         self.calc_folder_path = None
+        # optimisation specs
+        self.optimise_with_total_energy = False
+        self.tracked_total_energy = 0.0
+        self.optimise_with_orbitals = False
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.ecp_locators = []  # initial guesses for optimiser
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
+        self.optimise_with_gap = False
         self.initial_guesses = None
         with open(os.path.dirname(os.path.realpath(__file__))+'/chem_lib/optimiser_orbital_library.json', 'r') as json_file:
             self.orbital_library = json.load(json_file)
@@ -74,7 +83,10 @@ class Optimiser:
         with open(opt_data_path, 'r') as opt_data_file:
             optdata = json.load(opt_data_file)
         opt_data_file.close()
+        self.optimise_with_orbitals = optdata['optimise_with_orbitals']
+        self.optimise_with_total_energy = optdata['optimise_with_total_energy']
         self.tracked_orbitals = optdata['tracked_orbitals']
+        self.tracked_total_energy = optdata['tracked_total']
         self.calc_folder_path = optdata['calc_folder_path']
         self.ecp_locators = optdata['ecp_locators']
         self.initial_guesses = numpy.array(optdata['initial_guesses'])
@@ -159,10 +171,9 @@ class Optimiser:
         print("Whaddaya know, you've got potential.")
 
     def read_result(self, energy_type=None, orbital_to_read=None):
-        """Updates basis file with new coeff/exp value, runs the calculation and reads either the
-        resulting total or orbital energy."""
+        """Reads either the resulting total or orbital energy from dscf/ridft output."""
 
-        out_file_path = os.path.join(self.calc_folder_path, 'calc.log')
+        out_file_path = os.path.join(self.calc_folder_path, '%s.log' % self.calculation_type)
         out_file = open(out_file_path, 'r')
         output_energies = []
         for i, line in enumerate(out_file):
@@ -172,7 +183,7 @@ class Optimiser:
                     if split_line[0] == "irrep" and orbital_to_read['irrep'] in split_line:
                         energy_line = ' '.join(linecache.getline(out_file_path, i + 3).split()).split()
                         orbital_e = energy_line[split_line.index(orbital_to_read['irrep'])]
-                        print("new orbital energy %s" % orbital_e)
+                        print("    new orbital energy: %s" % orbital_e)
                         output_energies.append(orbital_e)
                         linecache.clearcache()
                 elif energy_type == 'total':
@@ -183,25 +194,45 @@ class Optimiser:
                             total_e = energy_line[3][1:]
                         else:
                             total_e = energy_line[4]
-                        print("new total energy %s" % total_e)
+                        print("    new total energy: %s" % total_e)
                         output_energies.append(total_e)
                         linecache.clearcache()
                 else:
                     print('Please specify a valid energy type (orbital or total) for me to optimise.')
-        print('Found energy for type: %s, irrep: %s: %s' % (
+        print('   Found energy for type: %s, irrep: %s: %s' % (
                        energy_type,
-                       orbital_to_read['irrep'],
-                       float(output_energies[self.spin_indices[orbital_to_read['spin']]])
+                       orbital_to_read['irrep'] if orbital_to_read else 'total',
+                       float(output_energies[self.spin_indices[orbital_to_read['spin']]]) if orbital_to_read
+                       else output_energies[0]
                    )
               )
-        return float(output_energies[self.spin_indices[orbital_to_read['spin']]])
+        return float(output_energies[self.spin_indices[orbital_to_read['spin']]]) if orbital_to_read \
+            else float(output_energies[0])
+
+    def read_eiger(self, value_to_read='homolumo'):
+        self.basis.run_eiger(add_to_log=True, file_path=self.calc_folder_path)
+        out_file_path = os.path.join(self.calc_folder_path, 'eiger.log')
+        out_file = open(out_file_path, 'r')
+        gap_energy = None
+
+        for i, line in enumerate(out_file):
+            split_line = ' '.join(line.split()).split()
+            if split_line:
+                if value_to_read == 'homolumo':
+                    if split_line[0] == 'Gap':
+                        gap_line = ' '.join(linecache.getline(out_file_path, i + 1).split()).split()
+                        gap_energy = gap_line[5]
+                        print("    new HOMO-LUMO energy: %s" % gap_energy)
+                        linecache.clearcache()
+
+        return float(gap_energy)
 
     def run_multivariate_orbital_optimisation(self, array_of_potentials):
         """Tries to optimise for tracked orbital energies using specified potentials."""
 
         def run_multivariate_calc(x0):
-            '''Takes array of coeffs and exps, maps them to and updates their ecps, runs the calculation and
-               reads the results from calc.log. It then normalises and returns the results as a list.'''
+            """Takes array of coeffs and exps, maps them to and updates their ecps, runs the calculation and
+               reads the results from calc.log. It then normalises and returns the results as a list."""
             potential_variable_list = []
             for pot in range(0, len(x0), 2):
                 potential_variable_list.append([x0[pot], x0[pot+1]])
@@ -224,24 +255,40 @@ class Optimiser:
             elif self.calculation_type == 'ridft':
                 self.basis.run_ridft(add_to_log=True, file_path=self.calc_folder_path)
 
+            # Read all results
+
             # Read orbital energies
             read_orbital_energies = []
             for tracked_orbital in self.tracked_orbitals:
                 read_orbital_energies.append(self.read_result(energy_type='orbital',
                                                               orbital_to_read=tracked_orbital))
-            print('Read new energies...')
-
-            # Normalise results
+            # Normalise orbitals
             normalised_orbital_energies = []
-            for i, read_orbital_energy in enumerate(read_orbital_energies):
-                normalised_energy = numpy.abs(read_orbital_energy - self.tracked_orbitals[i]['reference_energy'])
-                print('irrep: %s, %s eV (error %s)' % (
-                    self.tracked_orbitals[i]['irrep'],
-                    read_orbital_energy,
-                    normalised_energy
+            if self.optimise_with_orbitals is True:
+                for i, read_orbital_energy in enumerate(read_orbital_energies):
+                    normalised_energy = numpy.abs(read_orbital_energy - self.tracked_orbitals[i]['reference_energy'])
+                    print('irrep: %s, %s eV (error %s)' % (
+                        self.tracked_orbitals[i]['irrep'],
+                        read_orbital_energy,
+                        normalised_energy
+                        )
                     )
+                    normalised_orbital_energies.append(normalised_energy)
+
+            # Normalise total
+            normalised_total = 0.0
+            if self.optimise_with_total_energy is True:
+                read_total_energy = self.read_result(energy_type='total')
+                normalised_total = numpy.abs(read_total_energy - self.tracked_total_energy)
+                print('total: %s eV (error %s)' % (
+                    read_total_energy,
+                    normalised_total
                 )
-                normalised_orbital_energies.append(normalised_energy)
+                )
+
+            # Read HOMO-LUMO gap
+            if self.optimise_with_gap is True:
+                read_gap_energy = self.read_eiger(value_to_read='homolumo')
 
             # Read energy gradients
             gradient_error = 0.0
@@ -258,8 +305,8 @@ class Optimiser:
                 gradient_error = gradient_error * self.gradient_error_multiplier
                 print('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
 
-            print('Total error: %s eV' % str(sum(normalised_orbital_energies) + gradient_error))
-            return sum(normalised_orbital_energies) + gradient_error
+            print('Total error: %s eV' % str(sum(normalised_orbital_energies) + gradient_error + normalised_total))
+            return sum(normalised_orbital_energies) + gradient_error + normalised_total
 
         print('Optimising ecps %s over irreps %s' % (
             [locator['basis_ecp_name'] for locator in self.ecp_locators], [tracked['irrep'] for tracked in self.tracked_orbitals])
@@ -267,7 +314,7 @@ class Optimiser:
 
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
         pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50)]
-        pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
+        #pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
         # Only SLSQP handles constraints and bounds.
         return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
                                        options={'eps': 0.001,

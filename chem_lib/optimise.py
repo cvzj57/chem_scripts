@@ -211,3 +211,12 @@ class BasisControl:
         else:
             command = 'ridft'
         subprocess.call(command, shell=True)
+
+    @staticmethod
+    def run_eiger(add_to_log=False, file_path=''):
+        print("running %s eiger, add to log is %s" % (file_path, add_to_log))
+        if add_to_log == True:
+            command = 'eiger > eiger.log'
+        else:
+            command = 'eiger'
+        subprocess.call(command, shell=True)

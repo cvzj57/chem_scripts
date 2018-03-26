@@ -144,6 +144,18 @@
         "spin": "mos",
         "reference_energy": -14.892
       }
+    ],
+    "benzene_dimer": [
+      {
+        "irrep": "6a",
+        "spin": "mos",
+        "reference_energy": -6.862
+      },
+      {
+        "irrep": "4a",
+        "spin": "mos",
+        "reference_energy": -9.568
+      }
     ]
   },
   "initial_guess_list":[
