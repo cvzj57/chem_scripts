@@ -11,6 +11,7 @@ empty_setup_file = {
     'calc_folder_path': '',
     'optimise_with_orbitals': True,
     'optimise_with_total_energy': False,
+    'optimise_with_excitations': False,
     'ecp_locators': [
         {'line_type': '$ecp',
          'basis_ecp_name': 'c ecp-p',
@@ -33,6 +34,11 @@ empty_setup_file = {
         'reference_energy': 0.0
     },
     ],
+    'tracked_excitations': [{
+        'repr': '1a',
+        'reference_energy': 0.0
+    },
+    ],
     'tracked_total': 0.0,
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
     'initial_guesses': [0.1, 0.1, 0.1, 0.1]
@@ -52,12 +58,21 @@ class Optimiser:
         # optimisation specs
         self.optimise_with_total_energy = False
         self.tracked_total_energy = 0.0
+
         self.optimise_with_orbitals = False
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
+
+        self.optimise_with_excitations = False
+        self.tracked_excitations = []  # locators for tddft excitations to attempt to optimise
+
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
+
         self.ecp_locators = []  # initial guesses for optimiser
+
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
+
         self.optimise_with_gap = False
+
         self.initial_guesses = None
         with open(os.path.dirname(os.path.realpath(__file__))+'/chem_lib/optimiser_orbital_library.json', 'r') as json_file:
             self.orbital_library = json.load(json_file)
@@ -227,6 +242,38 @@ class Optimiser:
 
         return float(gap_energy)
 
+    def read_escf(self, excitation_to_read=None):
+
+        out_file_path = os.path.join(self.calc_folder_path, '%s.log' % self.calculation_type)
+        out_file = open(out_file_path, 'r')
+        excitation_energy = 0.0
+        oscillator_strength = 0.0
+        rotatory_strength = 0.0
+        for i, line in enumerate(out_file):
+            split_line = ' '.join(line.split()).split()
+            if split_line:
+                if split_line[-1] == "excitation" and split_line[0]+split_line[2] == excitation_to_read['repr']:
+                    energy_ev = ' '.join(linecache.getline(out_file_path, i + 7).split()).split()[4]
+                    oscillator_str = ' '.join(linecache.getline(out_file_path, i + 16).split()).split()[2]
+                    rotatory_str = ' '.join(linecache.getline(out_file_path, i + 25).split()).split()[2]
+
+                    print("    new excitation energy: %s eV\n"
+                          "      oscillator strength: %s\n"
+                          "        rotatory strength: %s\n" % (energy_ev, oscillator_str, rotatory_str))
+
+                    excitation_energy = float(energy_ev)
+                    oscillator_strength = float(oscillator_str)
+                    rotatory_strength = float(rotatory_str)
+                    linecache.clearcache()
+
+                else:
+                    print('Please specify a valid energy type (orbital or total) for me to optimise.')
+
+        return {'excitation': excitation_energy,
+                'oscillation': oscillator_strength,
+                'rotatory': rotatory_strength
+                }
+
     def run_multivariate_orbital_optimisation(self, array_of_potentials):
         """Tries to optimise for tracked orbital energies using specified potentials."""
 
@@ -286,6 +333,27 @@ class Optimiser:
                 )
                 )
 
+            # Collect ESCF results
+            normalised_excitation_energies = []
+            normalised_oscillator_strengths = []
+            normalised_rotatory_strengths = []
+            read_escf_results = []
+            if self.optimise_with_excitations is True:
+                self.basis.run_escf(add_to_log=True, file_path=self.calc_folder_path)
+
+                for tracked_excitation in self.tracked_excitations:
+                    read_escf_results.append(self.read_escf(excitation_to_read=tracked_excitation))
+
+                for i, read_excitation in enumerate(read_escf_results):
+                    normalised_excitation = numpy.abs(read_excitation['excitation'] - self.tracked_excitations[i]['reference_energy'])
+                    print('ex rep: %s, %s eV (error %s)' % (
+                        self.tracked_excitations[i]['repr'],
+                        read_excitation,
+                        normalised_excitation
+                    )
+                          )
+                    normalised_excitation_energies.append(normalised_excitation)
+
             # Read HOMO-LUMO gap
             if self.optimise_with_gap is True:
                 read_gap_energy = self.read_eiger(value_to_read='homolumo')
@@ -302,11 +370,14 @@ class Optimiser:
                     dy = self.gradient.gradient_file[-1]['atoms'][atom_index]['dy']
                     dz = self.gradient.gradient_file[-1]['atoms'][atom_index]['dz']
                     gradient_error = gradient_error + numpy.abs(dx) + numpy.abs(dy) + numpy.abs(dz)
-                gradient_error = gradient_error * self.gradient_error_multiplier
+                gradient_error = gradient_error * self.gradient_error_multiplieraaa
                 print('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
 
-            print('Total error: %s eV' % str(sum(normalised_orbital_energies) + gradient_error + normalised_total))
-            return sum(normalised_orbital_energies) + gradient_error + normalised_total
+            print('Total error: %s eV' % str(sum(normalised_orbital_energies)
+                                             + gradient_error
+                                             + normalised_total
+                                             + sum(normalised_excitation_energies)))
+            return sum(normalised_orbital_energies) + gradient_error + normalised_total + sum(normalised_excitation_energies)
 
         print('Optimising ecps %s over irreps %s' % (
             [locator['basis_ecp_name'] for locator in self.ecp_locators], [tracked['irrep'] for tracked in self.tracked_orbitals])
