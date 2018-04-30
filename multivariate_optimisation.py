@@ -3,17 +3,20 @@ import linecache
 import os
 from chem_lib.optimise import BasisControl
 from chem_lib.gradient import GradientControl
+from chem_lib.escf import ESCFControl
 import scipy.optimize
 import numpy
 import json
 import subprocess
 import sys
+import logging
 
 empty_setup_file = {
     'calc_folder_path': '',
     'optimise_with_orbitals': True,
     'optimise_with_total_energy': False,
-    'optimise_with_excitations': False,
+    'optimise_with_fixed_excitations': False,
+    'optimise_with_flexible_excitations': False,
     'optimise_with_homo_lumo_gap': False,
     'ecp_locators': [
         {'line_type': '$ecp',
@@ -41,7 +44,10 @@ empty_setup_file = {
         'repr': '1a',
         'reference_energy': 0.0,
         'reference_oscillation': 0.0,
-        'reference_rotation': 0.0
+        'reference_rotation': 0.0,
+        'occ_orbitals': ['1a', '2a'],
+        'reference_wavelength': 162.0,
+        'electric_dipole_norm': 0.1
     },
     ],
     'tracked_homo_lumo_gap': 0.0,
@@ -49,6 +55,24 @@ empty_setup_file = {
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
     'initial_guesses': [0.1, 0.1, 0.1, 0.1]
 }
+
+# set up logging to file - see previous section for more details
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename=os.path.join(os.getcwd(), 'moo.log'),
+                    filemode='w')
+# define a Handler which writes INFO messages or higher to the sys.stderr
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+# set a format which is simpler for console use
+formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+# tell the handler to use this format
+console.setFormatter(formatter)
+# add the handler to the root logger
+logging.getLogger('').addHandler(console)
+# Now, we can log to the root logger, or any other logger. First the root...
+logging.info('Logging initialised...')
 
 
 class Optimiser:
@@ -71,8 +95,10 @@ class Optimiser:
         self.optimise_with_orbitals = False
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
 
-        self.optimise_with_excitations = False
+        self.optimise_with_fixed_excitations = False
+        self.optimise_with_flexible_excitations = False
         self.tracked_excitations = []  # locators for tddft excitations to attempt to optimise
+        self.flexible_excitation_error_multiplier = 1.0
 
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
@@ -85,7 +111,7 @@ class Optimiser:
             self.orbital_library = json.load(json_file)
 
     def run(self):
-        print(
+        logging.info(
             '''
             #######################################
              The Multi-Orbital Optimiser   (___)
@@ -98,16 +124,19 @@ class Optimiser:
             ''')
         opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
         if not os.path.isfile(opt_data_path):
-            print('No moo file, running setup...')
+            logging.info('No moo file, running setup...')
             self.setup_menu()
         else:
-            print('moo file found.')
+            logging.info('moo file found.')
         with open(opt_data_path, 'r') as opt_data_file:
             optdata = json.load(opt_data_file)
         opt_data_file.close()
         self.optimise_with_orbitals = optdata['optimise_with_orbitals']
         self.optimise_with_total_energy = optdata['optimise_with_total_energy']
-        self.optimise_with_excitations = optdata['optimise_with_excitations']
+        self.optimise_with_fixed_excitations = optdata['optimise_with_fixed_excitations']
+        self.optimise_with_flexible_excitations = optdata['optimise_with_flexible_excitations']
+        self.optimise_with_homo_lumo_gap = optdata['optimise_with_homo_lumo_gap']
+        self.tracked_homo_lumo_gap = optdata['tracked_homo_lumo_gap']
         self.tracked_orbitals = optdata['tracked_orbitals']
         self.tracked_excitations = optdata['tracked_excitations']
         self.tracked_total_energy = optdata['tracked_total']
@@ -116,11 +145,11 @@ class Optimiser:
         self.initial_guesses = numpy.array(optdata['initial_guesses'])
         if '-nosetup' in sys.argv:
             optimised_value = self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
-            print(optimised_value)
+            logging.info(optimised_value)
         else:
             if input('Run now? y/n: ') == 'y':
                 optimised_value = self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
-                print(optimised_value)
+                logging.info(optimised_value)
 
     def setup_menu(self):
         setup_file = empty_setup_file
@@ -184,31 +213,35 @@ class Optimiser:
             except ValueError:
                 print("That's not a choice!")
         if input('Add carbon s? y/n: ') == 'y':
-            setup_file['ecp_locators'].append(
-                {'line_type': '$ecp',
-                 'basis_ecp_name': 'c ecp-p',
-                 'orbital_descriptor': 's-f',
-                 'functions_list': [{'coefficient': 0,
-                                     'r^n': 1,
-                                     'exponent': 0}]
-                 })
+            setup_file['ecp_locators'].append({'line_type': '$ecp',
+                                               'basis_ecp_name': 'c ecp-p',
+                                               'orbital_descriptor': 's-f',
+                                               'functions_list': [{'coefficient': 0,
+                                                                   'r^n': 1,
+                                                                   'exponent': 0}]})
 
         with open(os.path.join(setup_file['calc_folder_path'], self.setup_file_name), 'w') as outfile:
             json.dump(setup_file, outfile, sort_keys=True, indent=2)
         outfile.close()
-        print("Whaddaya know, you've got potential.")
+        print("opt.moo settings file created. Use this file to add optimisation"
+              "of excitations, HOM-LUMO gap, total energy or gradients.")
 
     def remove_files(self, filename_list):
-        for filename in filename_list:
-            try:
-                os.remove(filename)
-            except OSError:
-                pass
+        command = 'rm %s' % ' '.join(filename for filename in filename_list)
+        subprocess.call(command, shell=True)
 
     @staticmethod
     def clear_actual():
-        print("clearing actual...")
+        logging.info("clearing actual...")
         command = 'kdg actual'
+        subprocess.call(command, shell=True)
+
+    @staticmethod
+    def clear_mos():
+        logging.info("clearing mos...")
+        command = 'kdg scfmo'
+        subprocess.call(command, shell=True)
+        command = 'adg scfmo none file=mos'
         subprocess.call(command, shell=True)
 
     def read_result(self, energy_type=None, orbital_to_read=None):
@@ -224,7 +257,7 @@ class Optimiser:
                     if split_line[0] == "irrep" and orbital_to_read['irrep'] in split_line:
                         energy_line = ' '.join(linecache.getline(out_file_path, i + 3).split()).split()
                         orbital_e = energy_line[split_line.index(orbital_to_read['irrep'])]
-                        print("    new orbital energy: %s" % orbital_e)
+                        logging.info("    new orbital energy: %s" % orbital_e)
                         output_energies.append(orbital_e)
                         linecache.clearcache()
                 elif energy_type == 'total':
@@ -235,23 +268,21 @@ class Optimiser:
                             total_e = energy_line[3][1:]
                         else:
                             total_e = energy_line[4]
-                        print("    new total energy: %s" % total_e)
+                        logging.info("    new total energy: %s" % total_e)
                         output_energies.append(total_e)
                         linecache.clearcache()
                 else:
-                    print('Please specify a valid energy type (orbital or total) for me to optimise.')
-        print('   Found energy for type: %s, irrep: %s: %s' % (
-                       energy_type,
-                       orbital_to_read['irrep'] if orbital_to_read else 'total',
-                       float(output_energies[self.spin_indices[orbital_to_read['spin']]]) if orbital_to_read
-                       else output_energies[0]
-                   )
-              )
+                    logging.info('Please specify a valid energy type (orbital or total) for me to optimise.')
+        logging.info('   Found energy for type: %s, irrep: %s: %s' % (
+            energy_type,
+            orbital_to_read['irrep'] if orbital_to_read else 'total',
+            float(output_energies[self.spin_indices[orbital_to_read['spin']]]) if orbital_to_read
+            else output_energies[0]))
         return float(output_energies[self.spin_indices[orbital_to_read['spin']]]) if orbital_to_read \
             else float(output_energies[0])
 
     def read_eiger(self, value_to_read='homolumo'):
-        self.basis.run_eiger(add_to_log=True, file_path=self.calc_folder_path)
+        self.basis.run_eiger(add_to_log=True, file_path=self.calc_folder_path, shell=True)
         out_file_path = os.path.join(self.calc_folder_path, 'eiger.log')
         out_file = open(out_file_path, 'r')
         gap_energy = None
@@ -263,31 +294,31 @@ class Optimiser:
                     if split_line[0] == 'Gap':
                         gap_line = ' '.join(linecache.getline(out_file_path, i + 1).split()).split()
                         gap_energy = gap_line[5]
-                        print("    new HOMO-LUMO energy: %s" % gap_energy)
+                        logging.info("    new HOMO-LUMO energy: %s" % gap_energy)
                         linecache.clearcache()
 
         return float(gap_energy)
 
     def read_escf(self, excitation_to_read=None):
-        print('reading excitation: %s...' % excitation_to_read['repr'])
+        logging.info('reading excitation: %s...' % excitation_to_read['repr'])
         out_file_path = os.path.join(self.calc_folder_path, '%s.log' % 'escf')
         out_file = open(out_file_path, 'r')
         excitation_energy = 100.0
-        oscillator_strength = None
-        rotatory_strength = None
+        oscillator_strength = 0.0
+        rotatory_strength = 0.0
         for i, line in enumerate(out_file):
             split_line = ' '.join(line.split()).split()
             if split_line:
                 if split_line[-1] == "excitation" and split_line[0]+split_line[2] == excitation_to_read['repr']:
                     if not 'WARNING!' in linecache.getline(out_file_path, i + 7):
-                        print(' ... found excitation')
+                        logging.info(' ... found excitation')
                         energy_ev = ' '.join(linecache.getline(out_file_path, i + 8).split()).split()[4]
                         oscillator_str = ' '.join(linecache.getline(out_file_path, i + 17).split()).split()[2]
                         rotatory_str = ' '.join(linecache.getline(out_file_path, i + 26).split()).split()[2]
 
-                        print("    new excitation energy: %s eV\n"
-                              "      oscillator strength: %s\n"
-                              "        rotatory strength: %s" % (energy_ev, oscillator_str, rotatory_str))
+                        logging.info("    new excitation energy: %s eV\n"
+                                     "      oscillator strength: %s\n"
+                                     "        rotatory strength: %s" % (energy_ev, oscillator_str, rotatory_str))
 
                         excitation_energy = float(energy_ev)
                         oscillator_strength = float(oscillator_str)
@@ -296,7 +327,7 @@ class Optimiser:
 
         return {'excitation': excitation_energy,
                 'oscillation': oscillator_strength,
-                'rotatory': rotatory_strength
+                'rotation': rotatory_strength
                 }
 
     def run_multivariate_orbital_optimisation(self, array_of_potentials):
@@ -306,7 +337,7 @@ class Optimiser:
             """Takes array of coeffs and exps, maps them to and updates their ecps, runs the calculation and
                reads the results from calc.log. It then normalises and returns the results as a list."""
             self.iterations += 1
-            print('\nOptimisation iteration: %s' % self.iterations)
+            logging.info('\n===== Optimisation iteration: %s =====' % self.iterations)
 
             potential_variable_list = []
             for pot in range(0, len(x0), 2):
@@ -320,17 +351,21 @@ class Optimiser:
                     if self.calc_folder_path:
                         self.basis.variable_file_path = os.path.join(self.calc_folder_path, 'basis')
                     self.basis.update_variable(self.ecp_locators[i])
+                    logging.info('Updated ECP %s: coeff %s exp %s' % (ecp_locator['basis_ecp_name'],
+                                                                      potential_variable_list[i][0],
+                                                                      potential_variable_list[i][1]))
             else:
-                print('Error mapping variables to ecps. No of ecps: %s. No of variable pairs: %s' %
+                logging.info('Error mapping variables to ecps. No of ecps: %s. No of variable pairs: %s' %
                       (len(self.ecp_locators), len(potential_variable_list)))
 
             self.clear_actual()
+            self.clear_mos()
 
             # Run the calculation
             if self.calculation_type == 'dscf':
-                self.basis.run_dscf(add_to_log=True, file_path=self.calc_folder_path)
+                self.basis.run_dscf(add_to_log=True, file_path=self.calc_folder_path, shell=True)
             elif self.calculation_type == 'ridft':
-                self.basis.run_ridft(add_to_log=True, file_path=self.calc_folder_path)
+                self.basis.run_ridft(add_to_log=True, file_path=self.calc_folder_path, shell=True)
 
             # Read all results
 
@@ -344,7 +379,7 @@ class Optimiser:
             if self.optimise_with_orbitals is True:
                 for i, read_orbital_energy in enumerate(read_orbital_energies):
                     normalised_energy = numpy.abs(read_orbital_energy - self.tracked_orbitals[i]['reference_energy'])
-                    print('             irrep %s: %s eV (error %s)' % (
+                    logging.info('             irrep %s: %s eV (error %s)' % (
                         self.tracked_orbitals[i]['irrep'],
                         read_orbital_energy,
                         normalised_energy
@@ -359,14 +394,15 @@ class Optimiser:
                 normalised_total = numpy.abs(read_total_energy - self.tracked_total_energy)
 
             # Collect ESCF results
-            normalised_excitation_energies = []
-            normalised_oscillator_strengths = []
-            normalised_rotatory_strengths = []
-            read_escf_results = []
-            if self.optimise_with_excitations is True:
+            if self.optimise_with_fixed_excitations is True or self.optimise_with_flexible_excitations is True:
                 self.remove_files(['sing*', 'vfile*', 'wfile*'])
                 self.basis.run_escf(add_to_log=True, file_path=self.calc_folder_path)
 
+            normalised_excitation_energy = 0.0
+            normalised_oscillator_strength = 0.0
+            normalised_rotatory_strength = 0.0
+            read_escf_results = []
+            if self.optimise_with_fixed_excitations is True:
                 for tracked_excitation in self.tracked_excitations:
                     read_escf_results.append(self.read_escf(excitation_to_read=tracked_excitation))
 
@@ -374,16 +410,36 @@ class Optimiser:
                     normalised_excitation = numpy.abs(read_excitation['excitation'] - self.tracked_excitations[i]['reference_energy'])
                     normalised_oscillation = numpy.abs(read_excitation['oscillation'] - self.tracked_excitations[i]['reference_oscillation'])
                     normalised_rotation = numpy.abs(read_excitation['rotation'] - self.tracked_excitations[i]['reference_rotation'])
-                    print("     new excitation error: %s eV\n" % normalised_excitation)
-                    print("    new oscillation error: %s eV\n" % normalised_oscillation)
-                    print("       new rotation error: %s eV\n" % normalised_rotation)
-                    normalised_excitation_energies.append(normalised_excitation)
-                    normalised_oscillator_strengths.append(normalised_oscillation)
-                    normalised_rotatory_strengths.append(normalised_rotation)
+                    logging.info("     new excitation error: %s eV" % normalised_excitation)
+                    logging.info("    new oscillation error: %s eV" % normalised_oscillation)
+                    logging.info("       new rotation error: %s eV" % normalised_rotation)
+                    normalised_excitation_energy += normalised_excitation
+                    normalised_oscillator_strength += normalised_oscillation
+                    normalised_rotatory_strength += normalised_rotation
+
+            normalised_flexible_excitation_error = 0.0
+            if self.optimise_with_flexible_excitations is True:
+                escf_control = ESCFControl()
+                escf_control.read_escf()
+                for tracked_excitation in self.tracked_excitations:
+                    normalised_contribution_error, calced_excitation = escf_control.evaluate_peak_error(
+                        tracked_excitation['reference_wavelength'],
+                        tracked_excitation['electric_dipole_norm'])
+                    if calced_excitation:
+                        logging.info("identified flexible excitation: %s with dipole norm %s" %
+                                     (calced_excitation['id'],
+                                      calced_excitation['electric_dipole_norm']))
+                    else:
+                        logging.info("        no matching excitation found.")
+                    logging.info("flexible excitation error: %s eV" % normalised_contribution_error)
+                    normalised_flexible_excitation_error += normalised_contribution_error
 
             # Read HOMO-LUMO gap
+            normalised_homo_lumo_gap = 0.0
             if self.optimise_with_homo_lumo_gap is True:
                 read_gap_energy = self.read_eiger(value_to_read='homolumo')
+                normalised_homo_lumo_gap = numpy.abs(read_gap_energy - self.tracked_homo_lumo_gap)
+                logging.info("      new HOMO-LUMO error: %s eV" % normalised_homo_lumo_gap)
 
             # Read energy gradients
             gradient_error = 0.0
@@ -398,46 +454,50 @@ class Optimiser:
                     dz = self.gradient.gradient_file[-1]['atoms'][atom_index]['dz']
                     gradient_error = gradient_error + numpy.abs(dx) + numpy.abs(dy) + numpy.abs(dz)
                 gradient_error = gradient_error * self.gradient_error_multiplier
-                print('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
+                logging.info('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
 
-            print('\nTotal error: %s eV\n' % str(sum(normalised_orbital_energies)
-                                                 + gradient_error
-                                                 + normalised_total
-                                                 + sum(normalised_excitation_energies)
-                                                 + sum(normalised_oscillator_strengths)
-                                                 + sum(normalised_rotatory_strengths)
-                                                 ))
-            return sum(normalised_orbital_energies) \
+            total_error = sum(normalised_orbital_energies) \
+                + normalised_homo_lumo_gap \
                 + gradient_error \
                 + normalised_total \
-                + sum(normalised_excitation_energies) \
-                + sum(normalised_oscillator_strengths) \
-                + sum(normalised_rotatory_strengths)
+                + normalised_excitation_energy \
+                + normalised_flexible_excitation_error * self.flexible_excitation_error_multiplier \
+                + normalised_oscillator_strength \
+                + normalised_rotatory_strength
 
-        print('Optimising ecps %s over irreps %s'
-              '%s'
-              '%s' % (
-            [locator['basis_ecp_name'] for locator in self.ecp_locators], [tracked['irrep'] for tracked in self.tracked_orbitals],
-            ' and excitations %s' % [tracked['repr'] for tracked in self.tracked_excitations] if self.optimise_with_excitations else '',
-            ' and total energy' if self.optimise_with_total_energy else '')
+            logging.info('\nTotal error: %s eV\n' % str(total_error))
+            return total_error
+
+        logging.info('Optimising potentials with: '
+                     '\n  - ecps %s over irreps %s %s %s %s %s' % (
+                     ', '.join(locator['basis_ecp_name'] for locator in self.ecp_locators),
+                     ', '.join(tracked['irrep'] for tracked in self.tracked_orbitals),
+                     '\n  - excitations %s' % ', '.join(tracked['repr'] for tracked in self.tracked_excitations) if self.optimise_with_fixed_excitations else '',
+                     '\n  - flexible excitations with dipole norms: %s' % str([tracked['electric_dipole_norm'] for tracked in self.tracked_excitations]) if self.optimise_with_flexible_excitations else '',
+                     '\n  - total energy' if self.optimise_with_total_energy else '',
+                     '\n  - HOMO-LUMO gap' if self.optimise_with_homo_lumo_gap else '')
         )
 
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
         pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50)]
         #pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
         # Only SLSQP handles constraints and bounds.
-        return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
-                                       options={'eps': 0.001,
-                                                'maxiter': 1000},
-                                       tol=0.0000000001,
-                                       bounds=pp_bounds,
-                                       # method='Nelder-Mead',
-                                       # method='Powell',
-                                       # method='CG',
-                                       # method='BFGS',
-                                       method='SLSQP',
-                                       # method='COBYLA',
-                                       )
+        logging.info('Commencing optimsation...')
+        try:
+            return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
+                                           options={'eps': 0.001,
+                                                    'maxiter': 150},
+                                           tol=0.0000000001,
+                                           bounds=pp_bounds,
+                                           # method='Nelder-Mead',
+                                           # method='Powell',
+                                           # method='CG',
+                                           # method='BFGS',
+                                           method='SLSQP',
+                                           # method='COBYLA',
+                                           )
+        except Exception as e:
+            logging.exception(str(e), exc_info=True)
 
 
 if __name__ == "__main__":
