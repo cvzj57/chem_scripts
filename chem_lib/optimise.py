@@ -186,10 +186,12 @@ class BasisControl:
         return contracted_coefficients_list, contracted_exponents_list
 
     @staticmethod
-    def run_dscf(add_to_log=False, file_path='', silent=False, shell=True):
+    def run_dscf(add_to_log=False, file_path='', silent=False, shell=True, custom_log_path=None):
         if silent is False:
             print("running %s dscf, add to log is %s" % (file_path, add_to_log))
-        if add_to_log == True:
+        if custom_log_path:
+            command = 'dscf | tee dscf.log %s; cp mos mos_%s' % (custom_log_path, custom_log_path)
+        elif add_to_log == True:
             command = 'dscf > dscf.log'
         else:
             command = 'dscf'

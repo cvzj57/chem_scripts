@@ -94,17 +94,20 @@ class Optimiser:
 
         self.optimise_with_orbitals = False
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
+        self.orbital_error_multiplier = 1.0
 
         self.optimise_with_fixed_excitations = False
         self.optimise_with_flexible_excitations = False
         self.tracked_excitations = []  # locators for tddft excitations to attempt to optimise
         self.flexible_excitation_error_multiplier = 1.0
+        self.flexible_excitation_osc_error_multiplier = 1.0
 
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
 
         self.optimise_with_homo_lumo_gap = False
         self.tracked_homo_lumo_gap = 0.0
+        self.homo_lumo_gap_error_multiplier = 1.0
 
         self.initial_guesses = None
         with open(os.path.dirname(os.path.realpath(__file__))+'/chem_lib/optimiser_orbital_library.json', 'r') as json_file:
@@ -294,7 +297,7 @@ class Optimiser:
                     if split_line[0] == 'Gap':
                         gap_line = ' '.join(linecache.getline(out_file_path, i + 1).split()).split()
                         gap_energy = gap_line[5]
-                        logging.info("    new HOMO-LUMO energy: %s" % gap_energy)
+                        logging.info("    new HOMO-LUMO gap: %s eV" % gap_energy)
                         linecache.clearcache()
 
         return float(gap_energy)
@@ -422,17 +425,21 @@ class Optimiser:
                 escf_control = ESCFControl()
                 escf_control.read_escf()
                 for tracked_excitation in self.tracked_excitations:
-                    normalised_contribution_error, calced_excitation = escf_control.evaluate_peak_error(
-                        tracked_excitation['reference_wavelength'],
-                        tracked_excitation['electric_dipole_norm'])
+                    normalised_contribution_error, normalised_oscillator_error, calced_excitation = escf_control.evaluate_peak_error(
+                        tracked_excitation['reference_energy'],
+                        tracked_excitation['reference_oscillation'],
+                        tracked_excitation['electric_dipole_norm'],
+                        tracked_excitation['repr'])
                     if calced_excitation:
                         logging.info("identified flexible excitation: %s with dipole norm %s" %
                                      (calced_excitation['id'],
                                       calced_excitation['electric_dipole_norm']))
                     else:
                         logging.info("        no matching excitation found.")
-                    logging.info("flexible excitation error: %s eV" % normalised_contribution_error)
+                    logging.info("flexible excitation wavelength error: %s eV" % normalised_contribution_error)
+                    #logging.info("flexible excitation oscillator error: %s" % normalised_oscillator_error)
                     normalised_flexible_excitation_error += normalised_contribution_error
+                    #normalised_flexible_excitation_error += normalised_oscillator_error * self.flexible_excitation_osc_error_multiplier
 
             # Read HOMO-LUMO gap
             normalised_homo_lumo_gap = 0.0
@@ -456,8 +463,8 @@ class Optimiser:
                 gradient_error = gradient_error * self.gradient_error_multiplier
                 logging.info('Gradient error: %s (multiplier %s)' % (gradient_error, self.gradient_error_multiplier))
 
-            total_error = sum(normalised_orbital_energies) \
-                + normalised_homo_lumo_gap \
+            total_error = sum(normalised_orbital_energies) * self.orbital_error_multiplier \
+                + normalised_homo_lumo_gap * self.homo_lumo_gap_error_multiplier \
                 + gradient_error \
                 + normalised_total \
                 + normalised_excitation_energy \
@@ -465,7 +472,12 @@ class Optimiser:
                 + normalised_oscillator_strength \
                 + normalised_rotatory_strength
 
+
             logging.info('\nTotal error: %s eV\n' % str(total_error))
+
+            command = 'mkdir moo_iterations/iteration_%s; cp * moo_iterations/iteration_%s' % (self.iterations, self.iterations)
+            subprocess.call(command, shell=True)
+
             return total_error
 
         logging.info('Optimising potentials with: '
@@ -478,6 +490,8 @@ class Optimiser:
                      '\n  - HOMO-LUMO gap' if self.optimise_with_homo_lumo_gap else '')
         )
 
+        subprocess.call('rm -rf moo_iterations; mkdir moo_iterations', shell=True)
+
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
         pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50)]
         #pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
@@ -487,7 +501,7 @@ class Optimiser:
             return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
                                            options={'eps': 0.001,
                                                     'maxiter': 150},
-                                           tol=0.0000000001,
+                                           tol=0.00001,
                                            bounds=pp_bounds,
                                            # method='Nelder-Mead',
                                            # method='Powell',
