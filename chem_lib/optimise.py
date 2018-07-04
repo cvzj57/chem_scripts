@@ -186,28 +186,43 @@ class BasisControl:
         return contracted_coefficients_list, contracted_exponents_list
 
     @staticmethod
-    def run_dscf(add_to_log=False, file_path=''):
-        print("running %s dscf, add to log is %s" % (file_path, add_to_log))
-        if add_to_log == True:
+    def run_dscf(add_to_log=False, file_path='', silent=False, shell=True, custom_log_path=None):
+        if silent is False:
+            print("running %s dscf, add to log is %s" % (file_path, add_to_log))
+        if custom_log_path:
+            command = 'dscf | tee dscf.log %s; cp mos mos_%s' % (custom_log_path, custom_log_path)
+        elif add_to_log == True:
             command = 'dscf > dscf.log'
         else:
             command = 'dscf'
-        subprocess.call(command, shell=True, cwd=file_path)
+        subprocess.call(command, shell=shell, cwd=file_path)
 
     @staticmethod
-    def run_escf(add_to_log=False, file_path=''):
-        print("running %s escf, add to log is %s" % (file_path, add_to_log))
+    def run_escf(add_to_log=False, file_path='', silent=False, shell=True):
+        if silent is False:
+            print("running %s escf, add to log is %s" % (file_path, add_to_log))
         if add_to_log == True:
             command = 'escf > escf.log'
         else:
             command = 'escf'
-        subprocess.call(command, shell=True, cwd=file_path)
+        subprocess.call(command, shell=shell, cwd=file_path)
 
     @staticmethod
-    def run_ridft(add_to_log=False, file_path=''):
-        print("running %s ridft, add to log is %s" % (file_path, add_to_log))
+    def run_ridft(add_to_log=False, file_path='', silent=False, shell=True):
+        if silent is False:
+            print("running %s ridft, add to log is %s" % (file_path, add_to_log))
         if add_to_log == True:
             command = 'ridft > ridft.log'
         else:
             command = 'ridft'
-        subprocess.call(command, shell=True)
+        subprocess.call(command, shell=shell)
+
+    @staticmethod
+    def run_eiger(add_to_log=False, file_path='', silent=False, shell=True):
+        if silent is False:
+            print("running %s eiger, add to log is %s" % (file_path, add_to_log))
+        if add_to_log == True:
+            command = 'eiger > eiger.log'
+        else:
+            command = 'eiger'
+        subprocess.call(command, shell=shell)

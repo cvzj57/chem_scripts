@@ -16,41 +16,18 @@ define_cmds = '''
 a coord
 *
 no
-b "%s" none
-ecp "%s" %s
-file basis
-b
 %s
 %s
-file basis
-ecp
 %s
 %s
-file basis
-b "%s" none
-ecp "%s" %s
-file basis
-b
 %s
 %s
-file basis
-ecp
 %s
 %s
-file basis
-b "%s" none
-ecp
 %s
 %s
-file basis
-b
 %s
 %s
-file basis
-ecp
-%s
-%s
-file basis
 *
 q
 
@@ -265,11 +242,62 @@ class CoordControl:
                            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-    def identify_pseudocarbon_potentials(self, atom):
+    def set_potential_distance_to(self, atom_hash, new_distance):
+        """Moves potentials around an atom to specified distance."""
+        pseudopotentials = self.identify_pseudocarbon_potentials(atom_hash)
+        potential_coords_list = []
+        deletion_list = []
+
+        for pseudopotential in pseudopotentials:
+            vector_from_pseudo_carbon = self.vectorise_atom(pseudopotential['#']) - self.vectorise_atom(atom_hash)
+            new_vector_from_pseudocarbon = self.lengtherise_vector(vector_from_pseudo_carbon, new_distance)
+            new_potential_coordinates = self.vectorise_atom(atom_hash) + new_vector_from_pseudocarbon
+            potential_coords_list.append(new_potential_coordinates)
+            deletion_list.append(pseudopotential['#'])
+
+        self.delete_specified_atoms(deletion_list)
+        for potential_coord in potential_coords_list:
+            self.write_coord(potential_coord, overwrite=False)
+
+    def set_potential_aperture_angle_to(self, atom_hash, new_distance):
+        """Moves potentials around an atom to specified distance."""
+        #TODO: Finish this.
+        pseudopotentials = self.identify_pseudocarbon_potentials(atom_hash)
+        potential_coords_list = []
+        deletion_list = []
+
+        for pseudopotential in pseudopotentials:
+            # get rotation axis via cross-products
+            # if 3 atoms within pseudo-distance this is an sp3 pseudo-carbon
+            if len(pseudopotentials) == 3:
+                pass
+
+            # if 4 atoms within pseudo-distance this is an sp2 2e pseudo-carbon
+            elif len(pseudopotentials) == 4:
+                pass
+
+            # if 6 atoms within pseudo-distance this is an sp2 pseudo-carbon
+            elif len(pseudopotentials) == 6:
+                pass
+
+            # apply euler-rodriguez
+
+            vector_from_pseudo_carbon = self.vectorise_atom(pseudopotential['#']) - self.vectorise_atom(atom_hash)
+            new_vector_from_pseudocarbon = self.lengtherise_vector(vector_from_pseudo_carbon, new_distance)
+            new_potential_coordinates = self.vectorise_atom(atom_hash) + new_vector_from_pseudocarbon
+
+            potential_coords_list.append(new_potential_coordinates)
+            deletion_list.append(pseudopotential['#'])
+
+        self.delete_specified_atoms(deletion_list)
+        for potential_coord in potential_coords_list:
+            self.write_coord(potential_coord, overwrite=False)
+
+    def identify_pseudocarbon_potentials(self, atom_hash):
         pseudos = []
 
-        distanced_atoms = self.order_atoms_by_distance_from(atom['#'])
-        nearest_6_distances = [self.measure_atom_atom_dist(atom['#'], distanced_atom['#']) for distanced_atom in
+        distanced_atoms = self.order_atoms_by_distance_from(atom_hash)
+        nearest_6_distances = [self.measure_atom_atom_dist(atom_hash, distanced_atom['#']) for distanced_atom in
                                distanced_atoms[1:7]]
         pseudo_distances = [less_than_distance for less_than_distance in nearest_6_distances if
                             less_than_distance < self.pseudo_deciding_distance]
@@ -286,8 +314,26 @@ class CoordControl:
         elif len(pseudo_distances) == 6:
             pseudos = distanced_atoms[1:7]
 
-        print("Identified %s as a %s pseudoed carbon." % (str(atom['#']), str(len(pseudo_distances))))
+        print("Identified %s as a %s pseudoed carbon." % (str(atom_hash), str(len(pseudo_distances))))
         return pseudos
+
+    def chunks(self, list_to_chunk, size):
+        """Yield successive n-sized chunks from l."""
+        for i in range(0, len(list_to_chunk), size):
+            yield list_to_chunk[i:i + size]
+
+    def supply_ecps_bases_to_define(self, atom_specifier, ecp_basis_type, ecp_basis_name):
+        '''Construct basis and ecp assignment blocks for define.'''
+        string_to_return = ''
+        if type(atom_specifier) is list:
+            chunked_indices = self.chunks(atom_specifier, 20)
+            for chunk in chunked_indices:
+                string_to_return += """%s\n%s\n%s\nfile\nbasis\n""" % \
+                        (ecp_basis_type, ','.join(str(index) for index in chunk), ecp_basis_name)
+        elif type(atom_specifier) is str:
+            string_to_return += """%s\n"%s"\n%s\nfile\nbasis\n""" % \
+                        (ecp_basis_type, atom_specifier, ecp_basis_name)
+        return string_to_return
 
     def guess_potentialisation(self, sysargs):
         """Guesses molecular potentialisation for sp2 and sp3 carbons."""
@@ -353,7 +399,7 @@ class CoordControl:
         sp2_pseudocarbon_list = []
 
         for atom in carbon_atoms:
-            carbon_pseudos = self.identify_pseudocarbon_potentials(atom)
+            carbon_pseudos = self.identify_pseudocarbon_potentials(atom['#'])
             # if 6 atoms within pseudo-distance this is an sp2 pseudo-carbon
             if len(carbon_pseudos) == 6:
                 sp2_pseudocarbon_list.append(atom)
@@ -374,7 +420,7 @@ class CoordControl:
                 if carbon_bonded_to_this_atom not in sp2_pseudocarbon_list:
                     def distance_from(list_atom):
                         return self.measure_atom_atom_dist(carbon_bonded_to_this_atom['#'], list_atom['#'])
-                    carbon_pseudos = self.identify_pseudocarbon_potentials(atom)
+                    carbon_pseudos = self.identify_pseudocarbon_potentials(atom['#'])
                     # find pseudos closest to the other carbon
                     pseudos_distanced_from_sp2_2e = sorted(carbon_pseudos, key=distance_from)
                     pseudopotential_hashes_to_delete.append(pseudos_distanced_from_sp2_2e[0]['#'])
@@ -392,7 +438,7 @@ class CoordControl:
         sp3_pseudocarbon_list = []
 
         for atom in carbon_atoms:
-            carbon_pseudos = self.identify_pseudocarbon_potentials(atom)
+            carbon_pseudos = self.identify_pseudocarbon_potentials(atom['#'])
 
             # if 3 atoms within pseudo-distance this is an sp3 pseudo-carbon
             if len(carbon_pseudos) == 3:
@@ -421,20 +467,20 @@ class CoordControl:
         with open(os.path.join(define_cmds_path), 'w') as var_file:
             var_file.writelines(define_cmds % (
                 # sp2 potentials
-                self.sp2_pseudo_element,
-                self.sp2_pseudo_element, self.sp2_hydrogen_ecp,
-                ','.join(str(carbon['#']) for carbon in sp2_pseudocarbon_list), self.pseudo_carbon_basis,
-                ','.join(str(carbon['#']) for carbon in sp2_pseudocarbon_list), self.sp2_carbon_ecp,
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'ecp', self.sp2_carbon_ecp),
+                self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'b', 'none'),
+                self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'ecp', self.sp2_hydrogen_ecp),
                 # sp3 potentials
-                self.sp3_pseudo_element,
-                self.sp3_pseudo_element, self.sp3_hydrogen_ecp,
-                ','.join(str(carbon['#']) for carbon in sp3_pseudocarbon_list), self.pseudo_carbon_basis,
-                ','.join(str(carbon['#']) for carbon in sp3_pseudocarbon_list), self.sp3_carbon_ecp,
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp3_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp3_pseudocarbon_list], 'ecp', self.sp3_carbon_ecp),
+                self.supply_ecps_bases_to_define(self.sp3_pseudo_element, 'b', 'none'),
+                self.supply_ecps_bases_to_define(self.sp3_pseudo_element, 'ecp', self.sp3_hydrogen_ecp),
                 # sp2 2e potentials
-                self.sp2_pseudo_element,
-                ','.join(str(pseudo['#']) for pseudo in sp2_2e_pseudohydrogen_list), self.sp2_2e_hydrogen_ecp,
-                ','.join(str(carbon['#']) for carbon in sp2_2e_pseudocarbon_list), self.pseudo_carbon_basis,
-                ','.join(str(carbon['#']) for carbon in sp2_2e_pseudocarbon_list), self.sp2_2e_carbon_ecp,
+                self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'b', 'none'),
+                self.supply_ecps_bases_to_define([hydrogen['#'] for hydrogen in sp2_2e_pseudohydrogen_list], 'ecp', self.sp2_2e_hydrogen_ecp),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_2e_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_2e_pseudocarbon_list], 'ecp', self.sp2_2e_carbon_ecp),
             ))
 
         self.run_define('define_add_pseudos')
