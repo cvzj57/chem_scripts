@@ -7,7 +7,7 @@ This contains various scripts to make pseudo-potential generation and use easier
 Use the coord.py script to place pseudo-potentials on a standard geometry. Keywords are:
 
  - `guess` This attempts to place sp2 and sp3 potentials throughout the **entire** molecule. In order to use it you will need:
-   - A Turbomole geometry file with **no internal coordinates**
+   - A Turbomole geometry file, named `coord`, with **no internal coordinates**
    - No control file (`guess` will make you a control file and assign the correct ecps and basis sets by itself)
    
    The reference basis file currently uses a combination of potentials optimised for sp2 1e, sp2 2e and sp3 1e Carbon atoms. The dummy atoms are a mixture of Helium and Lithium (this makes it easier to distinguish them from any remaining all-electron Hydrogens. The Carbon basis used is def-SV(P) with the s-functions removed. Example usage: `coord.py guess`.
@@ -16,7 +16,7 @@ Use the coord.py script to place pseudo-potentials on a standard geometry. Keywo
  
  - `sp3 in1 int2 in3...` This places 3 dummy atoms around the specified atoms in the sp3 (methyl-group) pattern. The integers represent the atom index (starting from 1). Example: `coord.py sp3 2 3 4`.
  
- - `del int1 int2 int3...` This removes the specified atoms and is chained with the sp2 or sp3 options. Use it to remove the all-electron Hydrogen atoms. For example, `coord.py sp3 1 del 2 3 4` Adds dummy atoms in the methyl pattern around atom 1, and removes the atoms 2, 3 and 4. This is useful because the atom indices often change during pseudo-potentialisation.  
+ - `del int1 int2 int3...` This removes the specified atoms and is chained with the sp2 or sp3 options. Use it to remove the all-electron Hydrogen atoms. For example, `coord.py sp3 1 del 2 3 4` will add dummy atoms in the methyl pattern around atom 1, and removes the atoms 2, 3 and 4. This is useful because the atom indices often change during pseudo-potentialisation.  
  
  ## Optimising potentials
  
