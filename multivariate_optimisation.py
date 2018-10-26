@@ -1,6 +1,7 @@
 #!//share/programs/PYTHON3/bin/python3.6
 import linecache
 import os
+from chem_lib.coord import CoordControl
 from chem_lib.optimise import BasisControl
 from chem_lib.gradient import GradientControl
 from chem_lib.escf import ESCFControl
@@ -10,14 +11,24 @@ import json
 import subprocess
 import sys
 import logging
+import matplotlib.pyplot as plt
 
 empty_setup_file = {
     'calc_folder_path': '',
+    'optimise_pseudo_geometry': False,
     'optimise_with_orbitals': True,
     'optimise_with_total_energy': False,
     'optimise_with_fixed_excitations': False,
     'optimise_with_flexible_excitations': False,
+    'optimise_with_excitation_spectra': False,
     'optimise_with_homo_lumo_gap': False,
+    'pseudo_geometry': {
+        'indices_of_pseudo_carbons': [1],
+        'potential_set_distance_guess': 0.5,
+        'potential_set_split_distance_guess': 0.25,
+        'potential_set_distance_bounds': (0.5, 1.0),
+        'potential_set_split_distance_bounds': (0.25, 1.0)
+    },
     'ecp_locators': [
         {'line_type': '$ecp',
          'basis_ecp_name': 'c ecp-p',
@@ -37,7 +48,8 @@ empty_setup_file = {
     'tracked_orbitals': [{
         'irrep': '1a',
         'spin': 'mos',
-        'reference_energy': 0.0
+        'reference_energy': 0.0,
+        'orbital_error_multiplier': 0.0
     },
     ],
     'tracked_excitations': [{
@@ -80,6 +92,8 @@ class Optimiser:
     def __init__(self):
         # generic setup stuff
         self.setup_file_name = 'opt.moo'
+        self.coord = CoordControl()
+        self.coord.read_coords()
         self.basis = BasisControl()
         self.gradient = GradientControl()
         self.spin_indices = {'alpha': -2, 'beta': -1, 'mos': -1}
@@ -92,15 +106,20 @@ class Optimiser:
         self.optimise_with_total_energy = False
         self.tracked_total_energy = 0.0
 
+        self.optimise_pseudo_geometry = False
+        self.pseudo_geometry = [] # geometric specifications for pseudo geometry optimisation
+
         self.optimise_with_orbitals = False
         self.tracked_orbitals = []  # locators for orbitals to attempt to optimise
         self.orbital_error_multiplier = 1.0
 
         self.optimise_with_fixed_excitations = False
         self.optimise_with_flexible_excitations = False
+        self.optimise_with_excitation_spectra = False
         self.tracked_excitations = []  # locators for tddft excitations to attempt to optimise
         self.flexible_excitation_error_multiplier = 1.0
-        self.flexible_excitation_osc_error_multiplier = 1.0
+        self.flexible_excitation_osc_error_multiplier = 10.0
+        self.excitation_spectra_error_multiplier = 1.0
 
         self.tracked_atom_gradients = []  # hashes of atoms from which to read gradient
         self.gradient_error_multiplier = 10.0  # multiplier gradient minimisation
@@ -134,17 +153,20 @@ class Optimiser:
         with open(opt_data_path, 'r') as opt_data_file:
             optdata = json.load(opt_data_file)
         opt_data_file.close()
-        self.optimise_with_orbitals = optdata['optimise_with_orbitals']
-        self.optimise_with_total_energy = optdata['optimise_with_total_energy']
-        self.optimise_with_fixed_excitations = optdata['optimise_with_fixed_excitations']
-        self.optimise_with_flexible_excitations = optdata['optimise_with_flexible_excitations']
-        self.optimise_with_homo_lumo_gap = optdata['optimise_with_homo_lumo_gap']
-        self.tracked_homo_lumo_gap = optdata['tracked_homo_lumo_gap']
-        self.tracked_orbitals = optdata['tracked_orbitals']
-        self.tracked_excitations = optdata['tracked_excitations']
-        self.tracked_total_energy = optdata['tracked_total']
-        self.calc_folder_path = optdata['calc_folder_path']
-        self.ecp_locators = optdata['ecp_locators']
+        self.optimise_pseudo_geometry = optdata.get('optimise_pseudo_geometry')
+        self.optimise_with_orbitals = optdata.get('optimise_with_orbitals')
+        self.optimise_with_total_energy = optdata.get('optimise_with_total_energy')
+        self.optimise_with_fixed_excitations = optdata.get('optimise_with_fixed_excitations')
+        self.optimise_with_flexible_excitations = optdata.get('optimise_with_flexible_excitations')
+        self.optimise_with_excitation_spectra = optdata.get('optimise_with_excitation_spectra')
+        self.optimise_with_homo_lumo_gap = optdata.get('optimise_with_homo_lumo_gap')
+        self.tracked_homo_lumo_gap = optdata.get('tracked_homo_lumo_gap')
+        self.tracked_orbitals = optdata.get('tracked_orbitals')
+        self.tracked_excitations = optdata.get('tracked_excitations')
+        self.tracked_total_energy = optdata.get('tracked_total')
+        self.calc_folder_path = optdata.get('calc_folder_path')
+        self.ecp_locators = optdata.get('ecp_locators')
+        self.pseudo_geometry = optdata.get('pseudo_geometry', {})
         self.initial_guesses = numpy.array(optdata['initial_guesses'])
         if '-nosetup' in sys.argv:
             optimised_value = self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
@@ -231,13 +253,13 @@ class Optimiser:
 
     def remove_files(self, filename_list):
         command = 'rm %s' % ' '.join(filename for filename in filename_list)
-        subprocess.call(command, shell=True)
+        subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     @staticmethod
     def clear_actual():
         logging.info("clearing actual...")
         command = 'kdg actual'
-        subprocess.call(command, shell=True)
+        subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     @staticmethod
     def clear_mos():
@@ -343,8 +365,12 @@ class Optimiser:
             logging.info('\n===== Optimisation iteration: %s =====' % self.iterations)
 
             potential_variable_list = []
-            for pot in range(0, len(x0), 2):
-                potential_variable_list.append([x0[pot], x0[pot+1]])
+            if self.optimise_pseudo_geometry:
+                for pot in range(0, len(x0)-2, 2):
+                    potential_variable_list.append([x0[pot], x0[pot+1]])
+            else:
+                for pot in range(0, len(x0), 2):
+                    potential_variable_list.append([x0[pot], x0[pot+1]])
 
             # Use list of ecp locators to insert all variables
             if len(potential_variable_list) == len(self.ecp_locators):
@@ -360,6 +386,23 @@ class Optimiser:
             else:
                 logging.info('Error mapping variables to ecps. No of ecps: %s. No of variable pairs: %s' %
                       (len(self.ecp_locators), len(potential_variable_list)))
+
+            # Update potential geometry
+            if self.optimise_pseudo_geometry:
+                # self.coord.coord_list = []
+                # self.coord.read_coords()
+                for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
+                    self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1],
+                                                             # supplied_normal_vector=numpy.array([
+                                                             #     0.0,
+                                                             #     0.0,
+                                                             #     1.0
+                                                             # ])
+                                                             )
+                    logging.info('Re-potentialised atom %s, with set distance %s, split %s' % (
+                        self.pseudo_geometry['indices_of_pseudo_carbons'],
+                        x0[-2],
+                        x0[-1]))
 
             self.clear_actual()
             self.clear_mos()
@@ -381,11 +424,13 @@ class Optimiser:
             normalised_orbital_energies = []
             if self.optimise_with_orbitals is True:
                 for i, read_orbital_energy in enumerate(read_orbital_energies):
-                    normalised_energy = numpy.abs(read_orbital_energy - self.tracked_orbitals[i]['reference_energy'])
-                    logging.info('             irrep %s: %s eV (error %s)' % (
+                    normalised_energy = numpy.abs(read_orbital_energy - self.tracked_orbitals[i]['reference_energy'])\
+                                                     * self.tracked_orbitals[i]['orbital_error_multiplier']
+                    logging.info('             irrep %s: %s eV (error %s, multiplier %s)' % (
                         self.tracked_orbitals[i]['irrep'],
                         read_orbital_energy,
-                        normalised_energy
+                        normalised_energy,
+                        self.tracked_orbitals[i]['orbital_error_multiplier']
                         )
                     )
                     normalised_orbital_energies.append(normalised_energy)
@@ -397,7 +442,9 @@ class Optimiser:
                 normalised_total = numpy.abs(read_total_energy - self.tracked_total_energy)
 
             # Collect ESCF results
-            if self.optimise_with_fixed_excitations is True or self.optimise_with_flexible_excitations is True:
+            if self.optimise_with_fixed_excitations is True \
+                    or self.optimise_with_flexible_excitations is True \
+                    or self.optimise_with_excitation_spectra is True:
                 self.remove_files(['sing*', 'vfile*', 'wfile*'])
                 self.basis.run_escf(add_to_log=True, file_path=self.calc_folder_path)
 
@@ -439,7 +486,18 @@ class Optimiser:
                     logging.info("flexible excitation wavelength error: %s eV" % normalised_contribution_error)
                     #logging.info("flexible excitation oscillator error: %s" % normalised_oscillator_error)
                     normalised_flexible_excitation_error += normalised_contribution_error
-                    #normalised_flexible_excitation_error += normalised_oscillator_error * self.flexible_excitation_osc_error_multiplier
+                    normalised_flexible_excitation_error += normalised_oscillator_error * self.flexible_excitation_osc_error_multiplier
+
+            normalised_excitation_spectra_error = 0.0
+            # normalised_excitation_spectral_hash_error = 0.0
+            if self.optimise_with_excitation_spectra is True:
+                escf_control = ESCFControl()
+                spectral_error = escf_control.evaluate_spectral_error()
+                normalised_excitation_spectra_error += spectral_error * self.excitation_spectra_error_multiplier
+                # normalised_excitation_spectral_hash_error += spectral_hash_error * self.excitation_spectra_error_multiplier
+                logging.info("           new spectral least squares error: %s (multiplier %s)" % (spectral_error, self.excitation_spectra_error_multiplier))
+                # logging.info("      new spectral hash error: %s eV" % spectral_hash_error)
+
 
             # Read HOMO-LUMO gap
             normalised_homo_lumo_gap = 0.0
@@ -469,25 +527,47 @@ class Optimiser:
                 + normalised_total \
                 + normalised_excitation_energy \
                 + normalised_flexible_excitation_error * self.flexible_excitation_error_multiplier \
+                + normalised_excitation_spectra_error \
                 + normalised_oscillator_strength \
                 + normalised_rotatory_strength
 
 
             logging.info('\nTotal error: %s eV\n' % str(total_error))
 
-            command = 'mkdir moo_iterations/iteration_%s; cp * moo_iterations/iteration_%s' % (self.iterations, self.iterations)
-            subprocess.call(command, shell=True)
+            leading_iteration = "{:03}".format(self.iterations)
+            command = 'mkdir moo_iterations/iteration_%s; cp * moo_iterations/iteration_%s' % (leading_iteration,
+                                                                                               leading_iteration)
+            subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # Plot spectral optimisation
+            escf_control = ESCFControl()
+            reference_convolutions = escf_control.read_spyctrum(escf_control.reference_convolution_path)
+            pseudo_convolutions = escf_control.read_spyctrum(escf_control.convolution_path)
+            x_ref = [float(convolution[0]) for convolution in reference_convolutions]
+            x_ps = [float(convolution[0]) for convolution in pseudo_convolutions]
+            y_ref = [float(convolution[1]) for convolution in reference_convolutions]
+            y_ps = [float(convolution[1]) for convolution in pseudo_convolutions]
+
+            plt.plot(x_ref, y_ref)
+            plt.plot(x_ps, y_ps, linestyle="dashed")
+            plt.xlabel('Wavelength (nm)')
+            plt.ylabel('Intensity of absorption (arb. units)')
+            plt.text(900, 2.5, 'Iteration: %s' % "{:03}".format(self.iterations))
+            plt.savefig('moo_iterations/spectracomp_%s.png' % leading_iteration)
+            plt.gcf().clear()
 
             return total_error
 
         logging.info('Optimising potentials with: '
-                     '\n  - ecps %s over irreps %s %s %s %s %s' % (
+                     '\n  - ecps %s over irreps %s %s %s %s %s %s %s' % (
                      ', '.join(locator['basis_ecp_name'] for locator in self.ecp_locators),
                      ', '.join(tracked['irrep'] for tracked in self.tracked_orbitals),
-                     '\n  - excitations %s' % ', '.join(tracked['repr'] for tracked in self.tracked_excitations) if self.optimise_with_fixed_excitations else '',
+                     '\n  - fixed excitations %s' % ', '.join(tracked['repr'] for tracked in self.tracked_excitations) if self.optimise_with_fixed_excitations else '',
                      '\n  - flexible excitations with dipole norms: %s' % str([tracked['electric_dipole_norm'] for tracked in self.tracked_excitations]) if self.optimise_with_flexible_excitations else '',
+                     '\n  - excitation spectra' if self.optimise_with_excitation_spectra else '',
                      '\n  - total energy' if self.optimise_with_total_energy else '',
-                     '\n  - HOMO-LUMO gap' if self.optimise_with_homo_lumo_gap else '')
+                     '\n  - HOMO-LUMO gap' if self.optimise_with_homo_lumo_gap else '',
+                     '\n  - variable pseudo-potential geometry' if self.optimise_pseudo_geometry else '')
         )
 
         subprocess.call('rm -rf moo_iterations; mkdir moo_iterations', shell=True)
@@ -495,21 +575,50 @@ class Optimiser:
         # Bounds:   p coeff -ve,   p exp +ve,   s coeff +ve,   s exp +ve
         pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50)]
         #pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (-100, 100), (0.001, 50)]
+        #pp_bounds = [(-50, 50), (0.001, 50), (-50, 50), (0.001, 50), (0.5, 1.0), (0.25, 0.9)] # pseudo geometry
         # Only SLSQP handles constraints and bounds.
+
+        if self.optimise_pseudo_geometry:
+            pp_bounds.append(
+                (self.pseudo_geometry['potential_set_distance_bounds'][0],
+                 self.pseudo_geometry['potential_set_distance_bounds'][1])
+            )
+            pp_bounds.append(
+                (self.pseudo_geometry['potential_set_split_distance_bounds'][0],
+                 self.pseudo_geometry['potential_set_split_distance_bounds'][1])
+            )
+            array_of_potentials = numpy.append(array_of_potentials, self.pseudo_geometry['potential_set_distance_guess'])
+            array_of_potentials = numpy.append(array_of_potentials, self.pseudo_geometry['potential_set_split_distance_guess'])
+
+        print(pp_bounds)
+        print(array_of_potentials)
+
         logging.info('Commencing optimsation...')
         try:
-            return scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
-                                           options={'eps': 0.001,
-                                                    'maxiter': 150},
-                                           tol=0.00001,
-                                           bounds=pp_bounds,
-                                           # method='Nelder-Mead',
-                                           # method='Powell',
-                                           # method='CG',
-                                           # method='BFGS',
-                                           method='SLSQP',
-                                           # method='COBYLA',
-                                           )
+            output = scipy.optimize.minimize(run_multivariate_calc, array_of_potentials,
+                                             options={'eps': 0.001,
+                                                       'maxiter': 150},
+                                             tol=0.0001,
+                                             bounds=pp_bounds,
+                                             # method='Nelder-Mead',
+                                             # method='Powell',
+                                             # method='CG',
+                                             # method='BFGS',
+                                             method='SLSQP',
+                                             # method='COBYLA',
+                                             )
+            logging.info(output)
+
+            import imageio
+            filenames = []
+            if self.iterations > 10:
+                for i in range(1, self.iterations):
+                    filenames.append('moo_iterations/spectracomp_' + "{:03}".format(i) + '.png')
+                images = []
+                for filename in filenames:
+                    images.append(imageio.imread(filename))
+                imageio.mimsave('spectraopt.gif', images)
+
         except Exception as e:
             logging.exception(str(e), exc_info=True)
 

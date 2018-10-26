@@ -3,6 +3,7 @@ import math
 import sys
 import os
 import subprocess
+import shutil
 '''Library for the reading and manipulation of turbomole coordinate files. Contains functions to supply
 pseudo-potentials to molecules.'''
 
@@ -54,7 +55,8 @@ class CoordControl:
         self.sp2_2e_hydrogen_ecp = 'sp2-ecp-s2'
         self.add_primary_vector_potentials_as_coords = True
         self.bond_deciding_distance = 3.7
-        self.pseudo_deciding_distance = 0.7
+        self.pseudo_deciding_distance = 1.5
+        self.reference_guess_basis_path = 'chem_scripts/tm_files/reference_guess_basis'
 
     @staticmethod
     def check_is_int(s):
@@ -91,7 +93,7 @@ class CoordControl:
             new_atom['#'] = lineno
 
             self.coord_list.append(new_atom)
-        print('Read atom coords.')
+        # print('Read atom coords.')
         var_file.close()
 
     def write_coord(self, new_atom, overwrite=False):
@@ -120,12 +122,12 @@ class CoordControl:
             if var_file_data:
                 var_file.writelines(var_file_data)
 
-        print("Modified atom %s, now %s %s %s %s" % (
-            atom_hash,
-            new_atom['x'],
-            new_atom['y'],
-            new_atom['z'],
-            new_atom['el']))
+        # print("Modified atom %s, now %s %s %s %s" % (
+        #     atom_hash,
+        #     new_atom['x'],
+        #     new_atom['y'],
+        #     new_atom['z'],
+        #     new_atom['el']))
 
         var_file.close()
 
@@ -136,9 +138,10 @@ class CoordControl:
         for split_input in splitted:
             if '-' in split_input:
                 input_range = split_input.split('-')
-                final_coord_list.append(range(int(input_range[0]), int(input_range[1])))
+                final_coord_list.extend([*range(int(input_range[0]), int(input_range[1])+1)])
             else:
                 final_coord_list.append(int(split_input))
+        print(final_coord_list)
         return final_coord_list
 
     def delete_hydrogen_atoms(self):
@@ -209,12 +212,14 @@ class CoordControl:
     def distance_from(self, this_atom, list_atom):
         return self.measure_atom_atom_dist(this_atom['#'], list_atom['#'])
 
-    def order_atoms_by_distance_from(self, central_atom_index, element=None):
+    def order_atoms_by_distance_from(self, central_atom_index, element=None, list_of_atoms_to_distance=None):
 
         if element == '!h':
             coord_list = (item for item in self.coord_list if item["el"] != 'h')
         elif element:
             coord_list = (item for item in self.coord_list if item["el"] == element)
+        elif list_of_atoms_to_distance:
+            coord_list = list_of_atoms_to_distance
         else:
             coord_list = self.coord_list
 
@@ -259,6 +264,75 @@ class CoordControl:
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
 
+    def repseudopotentialise_sp2_atom(self, atom_hash, new_set_distance, new_set_split_distance, supplied_normal_vector=None):
+        # identify atom from hash
+        atom_to_repotentialise = self.vectorise_atom(atom_hash)
+        # identify current pseudopotentials
+        current_potentials = self.identify_pseudocarbon_potentials(atom_hash)
+        def return_hash(atom): return atom['#']
+        hashed_potential_list = sorted(current_potentials, key=return_hash)
+
+        # identify a primary vector
+        distanced_carbon_list = self.order_atoms_by_distance_from(atom_hash, element='c')
+        primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom_hash)
+        print('primary vector')
+        print(primary_vector)
+
+        # new potentials
+        new_potential_coords_list = []
+
+        # Identify normal vector to sp2 plane, take any potential, find its partner, and get vector between them
+        distanced_potential_list = self.order_atoms_by_distance_from(current_potentials[0]['#'],
+                                                                     list_of_atoms_to_distance=current_potentials)
+        if supplied_normal_vector is not None:
+            normal_vector = supplied_normal_vector
+        else:
+            normal_vector = self.vectorise_atom(hashed_potential_list[0]['#']) - self.vectorise_atom(hashed_potential_list[1]['#'])
+        print('normal_vector')
+        print(normal_vector)
+
+        primary_potential_vector = self.lengtherise_vector(primary_vector, new_set_distance)
+        potential_set_split_vector = self.lengtherise_vector(normal_vector, new_set_split_distance)
+
+        relative_potential_vectors = [
+            primary_potential_vector + potential_set_split_vector,
+            primary_potential_vector - potential_set_split_vector
+        ]
+
+        for potential_set in range(self.no_potential_sets_per_atom - 1):
+            pps_positive = numpy.dot(self.construct_euler_rodriguez_matrix(
+                normal_vector,
+                2 * numpy.pi / self.no_potential_sets_per_atom),
+                relative_potential_vectors[-2],
+            )
+            pps_negative = numpy.dot(self.construct_euler_rodriguez_matrix(
+                normal_vector,
+                2 * numpy.pi / self.no_potential_sets_per_atom),
+                relative_potential_vectors[-1]
+            )
+
+            relative_potential_vectors.append(pps_positive)
+            relative_potential_vectors.append(pps_negative)
+
+            # potential coords are still relative to their atom, now make them real.
+            for i, vector in enumerate(relative_potential_vectors):
+                new_potential_coords_list.append(
+                    {'#': current_potentials[i]['#'],
+                     'el': self.sp2_pseudo_element,
+                     'x': vector[0] + atom_to_repotentialise[0],
+                     'y': vector[1] + atom_to_repotentialise[1],
+                     'z': vector[2] + atom_to_repotentialise[2]},
+                )
+
+        # Now add potentials to coord list, we must overwrite the original potentials using their hashes.
+        # This stops the ECP and basis assignments being invalidated.
+        for potential_coord in new_potential_coords_list:
+            self.write_coord(potential_coord, overwrite=True)
+
+        print('Re-potentialised atom %s, with set distance %s, split %s' % (atom_hash,
+                                                                            new_set_distance,
+                                                                            new_set_split_distance))
+
     def set_potential_aperture_angle_to(self, atom_hash, new_distance):
         """Moves potentials around an atom to specified distance."""
         #TODO: Finish this.
@@ -275,6 +349,7 @@ class CoordControl:
             # if 4 atoms within pseudo-distance this is an sp2 2e pseudo-carbon
             elif len(pseudopotentials) == 4:
                 pass
+
 
             # if 6 atoms within pseudo-distance this is an sp2 pseudo-carbon
             elif len(pseudopotentials) == 6:
@@ -339,6 +414,8 @@ class CoordControl:
         """Guesses molecular potentialisation for sp2 and sp3 carbons."""
 
         print("Guessing potentialisation...")
+        print("Copying reference basis...")
+        shutil.copyfile(self.reference_guess_basis_path, os.path.join(os.getcwd(), 'basis'))
 
         sp2_replacement_list = []
         sp2_deletion_list = []
@@ -628,6 +705,9 @@ if __name__ == "__main__":
         control.pseudopotentialise_ethane_like_molecule(sys.argv)
     elif sys.argv[1] == 'guess':
         control.guess_potentialisation(sys.argv)
+    elif sys.argv[1] == 'repotentialise':
+        for pseudo_atom in control.parse_coord_list(sys.argv[2]):
+            control.repseudopotentialise_sp2_atom(pseudo_atom, float(sys.argv[3]), float(sys.argv[4]))
     else:
         print('Incorrect sysargs given.')
 
