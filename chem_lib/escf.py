@@ -1,8 +1,10 @@
 """This file contains functions to read and handle ESCF output."""
 import linecache
 import os
+import sys
 import numpy
 import subprocess
+import matplotlib.pyplot as plt
 
 sample_excitations = [
     {'id': '14a',
@@ -27,7 +29,9 @@ class ESCFControl:
         self.dipole_scan_focus = 0.5
         self.undetectable_excitation_replacement_error = 3000.0
         self.undetectable_excitation_oscillator_replacement_error = 1000.0
-        self.spyctrum_path = '../spyctrum/spyctrum/spyctrum.py'
+        self.l_min = 120
+        self.l_max = 180
+        self.spyctrum_path = 'chem_scripts/spyctrum/spyctrum/spyctrum.py'
         self.convolution_path = 'convolution.csv'
         self.reference_convolution_path = 'ref_convolution.csv'
 
@@ -65,15 +69,18 @@ class ESCFControl:
                     self.excitation_list.append(excitation_dict)
                     excitation_dict = {'dominant_contributions': []}
 
-    def run_spyctrum(self, spyctrum_path, lmin=1, lmax=1200):
+    def run_spyctrum(self, spyctrum_path):
         """Runs the spyctrum program to generate the spectral data file."""
         print("Convoluting the problem (spyctrum)...")
-        command = '%s -t %s -m convolution -l %s %s' % (spyctrum_path,
-                                                        self.escf_file,
-                                                        lmin,
-                                                        lmax)
-
-        subprocess.call(command, cwd=spyctrum_path)
+        command = 'python3 %s -t %s -m convolution -l %s %s' % (
+            spyctrum_path,
+            self.escf_file,
+            self.l_min,
+            self.l_max)
+        try:
+            subprocess.call(command, shell=True)
+        except Exception as e:
+            print(e)
 
     def read_spyctrum(self, convolution_path):
         var_file_path = os.path.join(convolution_path)
@@ -88,21 +95,17 @@ class ESCFControl:
 
         return convolutions
 
-    def evaulate_spyctrum_difference(self):
+    def evaulate_spyctrum_leastsquares_difference(self):
         """Reads and finds the difference between two spyctrum spectra.
         The spyctra should be comparable i.e. produced over the same wavelength range."""
         reference_convolutions = self.read_spyctrum(self.reference_convolution_path)
         pseudo_convolutions = self.read_spyctrum(self.convolution_path)
 
+        leastsquares_error = 0.0
         for i, reference_convolution in enumerate(reference_convolutions):
-            pseudo_convolutions[i] = pseudo_convolutions[i] - reference_convolution
+            leastsquares_error += (float(reference_convolution[1]) - float(pseudo_convolutions[i][1]))**2
 
-        total_error = 0.0
-
-        for convolution in pseudo_convolutions:
-            total_error += convolution[1]
-
-        return total_error
+        return leastsquares_error
 
     def evaulate_spyctrum_hash_difference(self):
         """Possibly stupid idea. Multiply ALL wavelengths and amplitudes from a spyctrum together to get a 'spyctral hash',
@@ -110,13 +113,10 @@ class ESCFControl:
         reference_convolutions = self.read_spyctrum(self.reference_convolution_path)
         pseudo_convolutions = self.read_spyctrum(self.convolution_path)
 
-        for i, reference_convolution in enumerate(reference_convolutions):
-            pseudo_convolutions[i] = pseudo_convolutions[i] - reference_convolution
-
         total_error = 0.0
-
-        for convolution in pseudo_convolutions:
-            total_error += convolution[0] * convolution[1]
+        for i, reference_convolution in enumerate(reference_convolutions):
+            total_error += numpy.abs(float(reference_convolution[0])*float(reference_convolution[1])
+                                     - float(pseudo_convolutions[i][0])*float(pseudo_convolutions[i][1]))
 
         return total_error
 
@@ -146,8 +146,8 @@ class ESCFControl:
                 return excitation
 
     def evaluate_peak_error(self, reference_wavelength, reference_oscillator_str, reference_electric_dipole_norm, ref_excitation_id=None):
-        excitation = self.identify_excitation_by_dipole_moment(reference_electric_dipole_norm)
-        #excitation = self.identify_excitation_by_id(ref_excitation_id)
+        # excitation = self.identify_excitation_by_dipole_moment(reference_electric_dipole_norm)
+        excitation = self.identify_excitation_by_id(ref_excitation_id)
         if excitation:
             wavelength_error = numpy.abs(excitation['energy_ev'] - float(reference_wavelength))
             oscillator_str_error = numpy.abs(excitation['oscillator_str'] - float(reference_oscillator_str))
@@ -159,7 +159,7 @@ class ESCFControl:
     def evaluate_spectral_error(self):
         self.run_spyctrum(self.spyctrum_path)
 
-        spyctral_error = self.evaulate_spyctrum_difference()
-        spyctral_hash_error = self.evaulate_spyctrum_hash_difference()
+        spyctral_error = self.evaulate_spyctrum_leastsquares_difference()
+        # spyctral_hash_error = self.evaulate_spyctrum_hash_difference()
 
-        return spyctral_error, spyctral_hash_error
+        return spyctral_error

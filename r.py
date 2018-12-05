@@ -266,9 +266,9 @@ def main():
 
     exp_r = handler.calculate_expected_r()
 
-    #pp_exponent = 0.295
+    pp_exponent = 0.295
     # pp_exponent = 0.34697
-    # pp_exponent = 10.0
+    #pp_exponent = 1.9
     # pp_exponent = 0.1492751032
     # pp_exponent = 4.0
     pp_exponent = 0.6245
