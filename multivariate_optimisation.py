@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 empty_setup_file = {
     'calc_folder_path': '',
     'optimise_pseudo_geometry': False,
+    'pseudo_geometry_type': '',
     'optimise_with_orbitals': True,
     'optimise_with_total_energy': False,
     'optimise_with_fixed_excitations': False,
@@ -107,6 +108,7 @@ class Optimiser:
         self.tracked_total_energy = 0.0
 
         self.optimise_pseudo_geometry = False
+        self.pseudo_geometry_type = ''
         self.pseudo_geometry = [] # geometric specifications for pseudo geometry optimisation
 
         self.optimise_with_orbitals = False
@@ -154,6 +156,7 @@ class Optimiser:
             optdata = json.load(opt_data_file)
         opt_data_file.close()
         self.optimise_pseudo_geometry = optdata.get('optimise_pseudo_geometry')
+        self.pseudo_geometry_type = optdata.get('pseudo_geometry_type')
         self.optimise_with_orbitals = optdata.get('optimise_with_orbitals')
         self.optimise_with_total_energy = optdata.get('optimise_with_total_energy')
         self.optimise_with_fixed_excitations = optdata.get('optimise_with_fixed_excitations')
@@ -392,13 +395,10 @@ class Optimiser:
                 # self.coord.coord_list = []
                 # self.coord.read_coords()
                 for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
-                    self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1],
-                                                             # supplied_normal_vector=numpy.array([
-                                                             #     0.0,
-                                                             #     0.0,
-                                                             #     1.0
-                                                             # ])
-                                                             )
+                    if self.pseudo_geometry_type == 'sp2':
+                        self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1])
+                    elif self.pseudo_geometry_type == 'sp3':
+                        self.coord.set_potential_distance_to(pseudo_carbon, x0[-2])
                     logging.info('Re-potentialised atom %s, with set distance %s, split %s' % (
                         self.pseudo_geometry['indices_of_pseudo_carbons'],
                         x0[-2],
@@ -540,21 +540,22 @@ class Optimiser:
             subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # Plot spectral optimisation
-            escf_control = ESCFControl()
-            reference_convolutions = escf_control.read_spyctrum(escf_control.reference_convolution_path)
-            pseudo_convolutions = escf_control.read_spyctrum(escf_control.convolution_path)
-            x_ref = [float(convolution[0]) for convolution in reference_convolutions]
-            x_ps = [float(convolution[0]) for convolution in pseudo_convolutions]
-            y_ref = [float(convolution[1]) for convolution in reference_convolutions]
-            y_ps = [float(convolution[1]) for convolution in pseudo_convolutions]
+            if self.optimise_with_excitation_spectra:
+                escf_control = ESCFControl()
+                reference_convolutions = escf_control.read_spyctrum(escf_control.reference_convolution_path)
+                pseudo_convolutions = escf_control.read_spyctrum(escf_control.convolution_path)
+                x_ref = [float(convolution[0]) for convolution in reference_convolutions]
+                x_ps = [float(convolution[0]) for convolution in pseudo_convolutions]
+                y_ref = [float(convolution[1]) for convolution in reference_convolutions]
+                y_ps = [float(convolution[1]) for convolution in pseudo_convolutions]
 
-            plt.plot(x_ref, y_ref)
-            plt.plot(x_ps, y_ps, linestyle="dashed")
-            plt.xlabel('Wavelength (nm)')
-            plt.ylabel('Intensity of absorption (arb. units)')
-            plt.text(900, 2.5, 'Iteration: %s' % "{:03}".format(self.iterations))
-            plt.savefig('moo_iterations/spectracomp_%s.png' % leading_iteration)
-            plt.gcf().clear()
+                plt.plot(x_ref, y_ref)
+                plt.plot(x_ps, y_ps, linestyle="dashed")
+                plt.xlabel('Wavelength (nm)')
+                plt.ylabel('Intensity of absorption (arb. units)')
+                plt.text(900, 2.5, 'Iteration: %s' % "{:03}".format(self.iterations))
+                plt.savefig('moo_iterations/spectracomp_%s.png' % leading_iteration)
+                plt.gcf().clear()
 
             return total_error
 
@@ -609,15 +610,16 @@ class Optimiser:
                                              )
             logging.info(output)
 
-            import imageio
-            filenames = []
-            if self.iterations > 10:
-                for i in range(1, self.iterations):
-                    filenames.append('moo_iterations/spectracomp_' + "{:03}".format(i) + '.png')
-                images = []
-                for filename in filenames:
-                    images.append(imageio.imread(filename))
-                imageio.mimsave('spectraopt.gif', images)
+            if self.optimise_with_excitation_spectra:
+                import imageio
+                filenames = []
+                if self.iterations > 10:
+                    for i in range(1, self.iterations):
+                        filenames.append('moo_iterations/spectracomp_' + "{:03}".format(i) + '.png')
+                    images = []
+                    for filename in filenames:
+                        images.append(imageio.imread(filename))
+                    imageio.mimsave('spectraopt.gif', images)
 
         except Exception as e:
             logging.exception(str(e), exc_info=True)

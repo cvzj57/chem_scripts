@@ -56,7 +56,7 @@ class CoordControl:
         self.add_primary_vector_potentials_as_coords = True
         self.bond_deciding_distance = 3.7
         self.pseudo_deciding_distance = 1.5
-        self.reference_guess_basis_path = 'chem_scripts/tm_files/reference_guess_basis'
+        self.reference_guess_basis_path = os.path.join(sys.path[0], '../tm_files/reference_guess_basis')
 
     @staticmethod
     def check_is_int(s):
@@ -249,10 +249,13 @@ class CoordControl:
 
     def set_potential_distance_to(self, atom_hash, new_distance):
         """Moves potentials around an atom to specified distance."""
+        # identify potentials from atom hash
         pseudopotentials = self.identify_pseudocarbon_potentials(atom_hash)
         potential_coords_list = []
         deletion_list = []
 
+        # Get vectors from potentials to their atom
+        # extend to new_distance
         for pseudopotential in pseudopotentials:
             vector_from_pseudo_carbon = self.vectorise_atom(pseudopotential['#']) - self.vectorise_atom(atom_hash)
             new_vector_from_pseudocarbon = self.lengtherise_vector(vector_from_pseudo_carbon, new_distance)
@@ -260,6 +263,7 @@ class CoordControl:
             potential_coords_list.append(new_potential_coordinates)
             deletion_list.append(pseudopotential['#'])
 
+        # delete old potentials
         self.delete_specified_atoms(deletion_list)
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
@@ -275,8 +279,6 @@ class CoordControl:
         # identify a primary vector
         distanced_carbon_list = self.order_atoms_by_distance_from(atom_hash, element='c')
         primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom_hash)
-        print('primary vector')
-        print(primary_vector)
 
         # new potentials
         new_potential_coords_list = []
@@ -288,8 +290,6 @@ class CoordControl:
             normal_vector = supplied_normal_vector
         else:
             normal_vector = self.vectorise_atom(hashed_potential_list[0]['#']) - self.vectorise_atom(hashed_potential_list[1]['#'])
-        print('normal_vector')
-        print(normal_vector)
 
         primary_potential_vector = self.lengtherise_vector(primary_vector, new_set_distance)
         potential_set_split_vector = self.lengtherise_vector(normal_vector, new_set_split_distance)
