@@ -13,7 +13,7 @@ c sless-SV(P)
 $ecp
 *
 # set=0.58206525 split=0.26891659
-c ecp-p
+c sp2-ecp-p
 *
   ncore =     5           lmax =     3
 #        coefficient   r^n          exponent
@@ -27,7 +27,7 @@ p-f
 d-f
            0.0000000    1           0.0000000
 *
-he ecp-s
+he sp2-ecp-s
 *
   ncore =     2           lmax =     3
 #        coefficient   r^n          exponent
