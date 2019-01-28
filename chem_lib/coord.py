@@ -422,8 +422,17 @@ class CoordControl:
         sp2_carbon_list = []
         sp3_replacement_list = []
         sp3_deletion_list = []
-        sp3_carbon_list =[]
-        carbon_atoms = [atom for atom in self.coord_list if atom["el"] == 'c']
+        sp3_carbon_list = []
+        # 'incl' lets us guess the potentialisation of supplied indices
+        # 'excl' will guess potentialisation of all carbon atoms except those specified
+        if 'incl' in sysargs:
+            include_list = self.parse_coord_list(sysargs[sysargs.index('incl')+1])
+            carbon_atoms = [atom for atom in self.coord_list if atom["#"] in include_list]
+        else:
+            carbon_atoms = [atom for atom in self.coord_list if atom["el"] == 'c']
+        if 'excl' in sysargs:
+            exclude_list = self.parse_coord_list(sysargs[sysargs.index('excl')+1])
+            carbon_atoms = [carbon_atom for carbon_atom in carbon_atoms if carbon_atom['#'] not in exclude_list]
 
         # Sort through carbons to decide what needs potentialising. Find atoms bonded to each carbon
         for atom in carbon_atoms:
