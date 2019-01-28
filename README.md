@@ -10,6 +10,8 @@ Use the coord.py script to place pseudo-potentials on a standard geometry. Keywo
    - A Turbomole geometry file, named `coord`, with **no internal coordinates**
    - No control file (`guess` will make you a control file and assign the correct ecps and basis sets by itself)
    
+The guess function also takes the arguments `incl` and `excl`. Using `incl` followed by carbon indices means the guess function will guess the potentialisation for those atoms *only*. Using `excl` followed by carbon indices means the guess function will guess the potentialisation for all atoms *except* those specified.
+   
    The reference basis file currently uses a combination of potentials optimised for sp2 1e, sp2 2e and sp3 1e Carbon atoms. The dummy atoms are a mixture of Helium and Lithium (this makes it easier to distinguish them from any remaining all-electron Hydrogens. The Carbon basis used is def-SV(P) with the s-functions removed. Example usage: `coord.py guess`.
 
  - `sp2 int1,int2,int3...` This places the 6 dummy atoms around the specified atoms in the sp2 pattern. The integers represent the atom index (starting from 1). Example: `coord.py sp2 2-4,5`.
