@@ -42,8 +42,11 @@ class CoordControl:
         self.coord_file_path = 'coord'
         self.coord_list = []
         self.no_potential_sets_per_atom = 3
-        self.atom_potential_set_distance = 0.5
-        self.potential_set_split_distance = 0.25
+        self.sp2_1e_atom_potential_set_distance = 0.58206525
+        self.sp2_2e_atom_potential_set_distance = 0.5
+        self.sp3_1e_atom_potential_distance = 0.5
+        self.sp2_1e_potential_set_split_distance = 0.26891659
+        self.sp2_2e_potential_set_split_distance = 0.25
         self.sp3_pseudo_element = 'li'
         self.sp2_pseudo_element = 'he'
         self.pseudo_carbon_basis = 'sless-SV(P)'
@@ -247,6 +250,12 @@ class CoordControl:
                            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
+    def get_atoms_within_bond_distance(self, atom_hash):
+        distanced_list = self.order_atoms_by_distance_from(atom_hash)
+        for distanced_atom in distanced_list:
+            if self.measure_atom_atom_dist(atom_hash, distanced_atom['#']) < self.bond_deciding_distance:
+                return distanced_list[0:distanced_list.index(distanced_atom)]
+
     def set_potential_distance_to(self, atom_hash, new_distance):
         """Moves potentials around an atom to specified distance."""
         # identify potentials from atom hash
@@ -417,12 +426,11 @@ class CoordControl:
         print("Copying reference basis...")
         shutil.copyfile(self.reference_guess_basis_path, os.path.join(os.getcwd(), 'basis'))
 
-        sp2_replacement_list = []
+        sp2_1e_replacement_list = []
+        sp2_2e_replacement_list = []
         sp2_deletion_list = []
-        sp2_carbon_list = []
         sp3_replacement_list = []
         sp3_deletion_list = []
-        sp3_carbon_list = []
         # 'incl' lets us guess the potentialisation of supplied indices
         # 'excl' will guess potentialisation of all carbon atoms except those specified
         if 'incl' in sysargs:
@@ -447,8 +455,7 @@ class CoordControl:
                 hydrogens_bonded_to_this_atom = [distanced_atom for distanced_atom in distanced_atoms[1:5] if
                                                  distanced_atom['el'] == 'h' and self.measure_atom_atom_dist(atom['#'], distanced_atom['#']) < self.bond_deciding_distance]
                 sp2_deletion_list.extend([hydrogen['#'] for hydrogen in hydrogens_bonded_to_this_atom])
-                sp2_replacement_list.append(str(atom['#']))
-                sp2_carbon_list.append(atom)
+                sp2_1e_replacement_list.append(str(atom['#']))
 
             # if 4 bonded atoms, may be sp3, check if they're hydrogens
             elif len(bonded_distances) == 4:
@@ -457,23 +464,47 @@ class CoordControl:
                 if len(hydrogens_bonded_to_this_atom) == 3:
                     sp3_replacement_list.extend([str(hydrogen['#']) for hydrogen in hydrogens_bonded_to_this_atom])
                     sp3_deletion_list.extend([hydrogen['#'] for hydrogen in hydrogens_bonded_to_this_atom])
-                    sp3_carbon_list.append(atom)
+
+        # Now we need to identify the carbons that are going to be 2e sp2 pseudocarbons
+        for carbon_hash in sp2_1e_replacement_list:
+            distanced_nonhydrogen_list = self.order_atoms_by_distance_from(int(carbon_hash), element='c')
+            nonhydrogens_bonded_to_this_carbon = [
+                distanced_atom for distanced_atom in distanced_nonhydrogen_list[1:5]
+                if self.measure_atom_atom_dist(int(carbon_hash), distanced_atom['#']) < self.bond_deciding_distance]
+            print("non-H atoms bonded to atom %s: %s" % (
+                carbon_hash, str([nonhydrogen['#'] for nonhydrogen in nonhydrogens_bonded_to_this_carbon])
+            ))
+
+            for nonhydrogen_bonded_to_this_carbon in nonhydrogens_bonded_to_this_carbon:
+                # If this carbon has a neighbour not in the sp2 1e list, we know this must be a 2e carbon!
+                if str(nonhydrogen_bonded_to_this_carbon['#']) not in sp2_1e_replacement_list:
+                    if str(carbon_hash) not in sp2_2e_replacement_list:
+                        sp2_2e_replacement_list.append(str(carbon_hash))
+
+        # Now go back and remove 2e pseudocarbons from the 1e list.
+        for carbon_hash in sp2_2e_replacement_list:
+                if str(carbon_hash) in sp2_1e_replacement_list:
+                    sp2_1e_replacement_list.remove(str(carbon_hash))
 
         log_file = open('pseudification.log', 'w+')
         log_file.writelines(
-            'sp2 carbon indices: %s \nsp3 carbon indices: %s \n' % (
-                ','.join(str(carbon['#']) for carbon in sp2_carbon_list),
-                ','.join(str(carbon['#']) for carbon in sp3_carbon_list)
+            '1e sp2 carbon indices: %s \n2e sp2 carbon indices: %s \nsp3 carbon indices: %s \n' % (
+                ','.join(sp2_hash for sp2_hash in sp2_1e_replacement_list),
+                ','.join(sp2_hash for sp2_hash in sp2_2e_replacement_list),
+                ','.join(sp3_hash for sp3_hash in sp3_replacement_list)
                 ))
 
-        sp2_coord_command = 'mn sp2 %s' % (','.join(sp2_replacement_list))
-        print("sp2 command: %s" % sp2_coord_command)
+        sp2_1e_coord_command = 'mn sp2 %s' % (','.join(sp2_1e_replacement_list))
+        print("sp2 command: %s" % sp2_1e_coord_command)
+        sp2_2e_coord_command = 'mn sp2 %s 2e' % (','.join(sp2_2e_replacement_list))
+        print("sp2 command: %s" % sp2_2e_coord_command)
         sp3_coord_command = 'mn sp3 %s' % (','.join(sp3_replacement_list))
         print("sp3 command: %s" % sp3_coord_command)
 
         if 'nosp3' not in sysargs:
             self.pseudopotentialise_ethane_like_molecule(sp3_coord_command.split(), execute_deletion=False)
-        self.pseudopotentialise_molecule(sp2_coord_command.split(), execute_deletion=False)
+        self.pseudopotentialise_molecule(sp2_1e_coord_command.split(), execute_deletion=False)
+        self.pseudopotentialise_molecule(sp2_2e_coord_command.split(), execute_deletion=False)
 
         self.delete_specified_atoms(sp2_deletion_list + sp3_deletion_list)
 
@@ -503,6 +534,7 @@ class CoordControl:
                                                      str([carbon['#'] for carbon in carbons_bonded_to_this_atom])))
 
             for carbon_bonded_to_this_atom in carbons_bonded_to_this_atom:
+                # If this carbon's has a neighbour not in the sp2 1e list, we know this must be a 2e carbon!
                 if carbon_bonded_to_this_atom not in sp2_pseudocarbon_list:
                     def distance_from(list_atom):
                         return self.measure_atom_atom_dist(carbon_bonded_to_this_atom['#'], list_atom['#'])
@@ -592,23 +624,39 @@ class CoordControl:
             distanced_atom_list = self.order_atoms_by_distance_from(atom['#'])
             distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
 
+            atoms_within_bond_distance = self.get_atoms_within_bond_distance(atom['#'])
+
             if len(distanced_carbon_list) == 1:
                 primary_vector = None
-                for non_c_atom in distanced_atom_list[1:4]:
+                for non_c_atom in atoms_within_bond_distance:
                     if non_c_atom['el'] != 'h':
                         primary_vector = self.vectorise_atom(non_c_atom['#']) - self.vectorise_atom(atom['#'])
                 if primary_vector is None:
                     primary_vector = self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#'])
+
+                normal_vector = numpy.cross(
+                    self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
+                    self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
+                )
             else:
                 primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom['#'])
 
-            normal_vector = numpy.cross(
-                self.vectorise_atom(distanced_atom_list[1]['#']) - self.vectorise_atom(atom['#']),
-                self.vectorise_atom(distanced_atom_list[2]['#']) - self.vectorise_atom(atom['#'])
-            )
+                normal_vector = numpy.cross(
+                    self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom['#']),
+                    self.vectorise_atom(distanced_carbon_list[2]['#']) - self.vectorise_atom(atom['#'])
+                )
 
-            primary_potential_vector = self.lengtherise_vector(primary_vector, self.atom_potential_set_distance)
-            potential_set_split_vector = self.lengtherise_vector(normal_vector, self.potential_set_split_distance)
+            if '2e' in sysargs:
+                print('2e keyword used. Using 2e-sp2 parameters.')
+                primary_potential_vector = self.lengtherise_vector(primary_vector,
+                                                                   self.sp2_2e_atom_potential_set_distance)
+                potential_set_split_vector = self.lengtherise_vector(normal_vector,
+                                                                     self.sp2_2e_potential_set_split_distance)
+            else:
+                primary_potential_vector = self.lengtherise_vector(primary_vector,
+                                                                   self.sp2_1e_atom_potential_set_distance)
+                potential_set_split_vector = self.lengtherise_vector(normal_vector,
+                                                                     self.sp2_1e_potential_set_split_distance)
 
             relative_potential_vectors = [
                 primary_potential_vector + potential_set_split_vector,
@@ -679,8 +727,8 @@ class CoordControl:
                 - self.vectorise_atom(atom['#'])
 
             # Lengtherise vector from carbon to give relative pp coordinates.
-            vector_c_to_new_pp = self.lengtherise_vector(vector_from_nearest_carbon, self.atom_potential_set_distance)
-            vector_c_to_new_dipole_pp = self.lengtherise_vector(vector_to_nearest_carbon, self.atom_potential_set_distance)
+            vector_c_to_new_pp = self.lengtherise_vector(vector_from_nearest_carbon, self.sp3_1e_atom_potential_distance)
+            vector_c_to_new_dipole_pp = self.lengtherise_vector(vector_to_nearest_carbon, self.sp3_1e_atom_potential_distance)
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(
