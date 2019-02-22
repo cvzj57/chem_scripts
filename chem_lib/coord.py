@@ -269,13 +269,18 @@ class CoordControl:
             vector_from_pseudo_carbon = self.vectorise_atom(pseudopotential['#']) - self.vectorise_atom(atom_hash)
             new_vector_from_pseudocarbon = self.lengtherise_vector(vector_from_pseudo_carbon, new_distance)
             new_potential_coordinates = self.vectorise_atom(atom_hash) + new_vector_from_pseudocarbon
-            potential_coords_list.append(new_potential_coordinates)
+            potential_coords_list.append(
+                    {'#': pseudopotential['#'],
+                     'el': self.sp3_pseudo_element,
+                     'x': new_potential_coordinates[0],
+                     'y': new_potential_coordinates[1],
+                     'z': new_potential_coordinates[2]},
+                )
             deletion_list.append(pseudopotential['#'])
 
-        # delete old potentials
-        self.delete_specified_atoms(deletion_list)
+        # overwrite old potentials
         for potential_coord in potential_coords_list:
-            self.write_coord(potential_coord, overwrite=False)
+            self.write_coord(potential_coord, overwrite=True)
 
     def repseudopotentialise_sp2_atom(self, atom_hash, new_set_distance, new_set_split_distance, supplied_normal_vector=None):
         # identify atom from hash
@@ -503,8 +508,11 @@ class CoordControl:
 
         if 'nosp3' not in sysargs:
             self.pseudopotentialise_ethane_like_molecule(sp3_coord_command.split(), execute_deletion=False)
-        self.pseudopotentialise_molecule(sp2_1e_coord_command.split(), execute_deletion=False)
-        self.pseudopotentialise_molecule(sp2_2e_coord_command.split(), execute_deletion=False)
+        if sp2_1e_replacement_list:
+
+            self.pseudopotentialise_molecule(sp2_1e_coord_command.split(), execute_deletion=False)
+        if sp2_2e_replacement_list:
+            self.pseudopotentialise_molecule(sp2_2e_coord_command.split(), execute_deletion=False)
 
         self.delete_specified_atoms(sp2_deletion_list + sp3_deletion_list)
 
@@ -752,6 +760,52 @@ class CoordControl:
         for potential_coord in potential_coords_list:
             self.write_coord(potential_coord, overwrite=False)
 
+    def pseudopotentialise_sp3_carbon(self, sysargs, execute_deletion=True):
+        """Potentialises an sp3 atom by reference to its carbon, unlike the other ethane function."""
+        #TODO
+        # Find atoms to replace
+        deletion_list = []
+        potential_coords_list = []
+        if len(sysargs) > 2:
+            if 'del' in sysargs:
+                deletion_list = self.parse_coord_list(sysargs[4])
+            replacement_list = self.parse_coord_list(sysargs[2])
+            atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
+            atoms_to_potentialise = self.parse_coord_list(sysargs[2])
+        else:
+            atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
+            #deletion_list = (item for item in self.coord_list if item["el"] == 'h')
+        print('Pseudo-potentialising atoms %s ...' % [atom['#'] for atom in atoms_to_potentialise])
+
+        for atom in atoms_to_potentialise:
+            three_nearest_hydrogens = self.order_atoms_by_distance_from(atom['#'], element='h')
+
+
+            # Find vector from nearest carbon.
+            distanced_carbon_list = self.order_atoms_by_distance_from(atom['#'], element='c')
+
+            vector_from_nearest_carbon = self.vectorise_atom(atom['#']) \
+                - self.vectorise_atom(distanced_carbon_list[0]['#'])
+            vector_to_nearest_carbon = self.vectorise_atom(distanced_carbon_list[0]['#']) \
+                - self.vectorise_atom(atom['#'])
+
+            # Lengtherise vector from carbon to give relative pp coordinates.
+            vector_c_to_new_pp = self.lengtherise_vector(vector_from_nearest_carbon, self.sp3_1e_atom_potential_distance)
+
+            # Add to carbon coords to get new pp coords.
+            potential_coords_list.append(
+                {'#': 0, 'el': self.sp3_pseudo_element,
+                 'x': vector_c_to_new_pp[0] + distanced_carbon_list[0]['x'],
+                 'y': vector_c_to_new_pp[1] + distanced_carbon_list[0]['y'],
+                 'z': vector_c_to_new_pp[2] + distanced_carbon_list[0]['z']},
+            )
+
+        # Now add potentials to coord list, after removing the 'real' atoms.
+        if execute_deletion is True:
+            self.delete_specified_atoms(deletion_list)
+        for potential_coord in potential_coords_list:
+            self.write_coord(potential_coord, overwrite=False)
+
 
 if __name__ == "__main__":
     control = CoordControl()
@@ -762,9 +816,12 @@ if __name__ == "__main__":
         control.pseudopotentialise_ethane_like_molecule(sys.argv)
     elif sys.argv[1] == 'guess':
         control.guess_potentialisation(sys.argv)
-    elif sys.argv[1] == 'repotentialise':
+    elif sys.argv[1] == 'repotentialise_sp2':
         for pseudo_atom in control.parse_coord_list(sys.argv[2]):
             control.repseudopotentialise_sp2_atom(pseudo_atom, float(sys.argv[3]), float(sys.argv[4]))
+    elif sys.argv[1] == 'repotentialise_sp3':
+        for pseudo_atom in control.parse_coord_list(sys.argv[2]):
+            control.set_potential_distance_to(pseudo_atom, float(sys.argv[3]))
     else:
         print('Incorrect sysargs given.')
 
