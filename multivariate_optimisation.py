@@ -136,6 +136,11 @@ class Optimiser:
         self.tracked_homo_lumo_gap = 0.0
         self.homo_lumo_gap_error_multiplier = 1.0
 
+        self.optimise_with_total_gap = False
+        self.tracked_total_gap = 0.0
+        self.gap_folder_path = '../triplet'
+        self.total_gap_error_multiplier = 1.0
+
         self.seeded_optimisation = False
         self.initial_seed_number = 5
         self.initial_guesses = None
@@ -183,7 +188,11 @@ class Optimiser:
                                                             self.optimise_with_excitation_spectra)
         self.optimise_with_homo_lumo_gap = optdata.get('optimise_with_homo_lumo_gap',
                                                        self.optimise_with_homo_lumo_gap)
+        self.optimise_with_total_gap = optdata.get('optimise_with_total_gap',
+                                                   self.optimise_with_total_gap)
         self.tracked_homo_lumo_gap = optdata.get('tracked_homo_lumo_gap')
+        self.tracked_total_gap = optdata.get('tracked_total_gap')
+        self.gap_folder_path = optdata.get('gap_folder_path', self.gap_folder_path)
         self.tracked_orbitals = optdata.get('tracked_orbitals')
         self.tracked_excitations = optdata.get('tracked_excitations')
         self.tracked_total_energy = optdata.get('tracked_total')
@@ -314,10 +323,14 @@ class Optimiser:
         command = 'adg scfiterlimit 3000'
         subprocess.call(command, shell=True)
 
-    def read_result(self, energy_type=None, orbital_to_read=None):
+    def read_result(self, energy_type=None, orbital_to_read=None, supplied_folder_path=None):
         """Reads either the resulting total or orbital energy from dscf/ridft output."""
 
-        out_file_path = os.path.join(self.calc_folder_path, '%s.log' % self.calculation_type)
+        if supplied_folder_path:
+            calc_folder_path = supplied_folder_path
+        else:
+            calc_folder_path = self.calc_folder_path
+        out_file_path = os.path.join(calc_folder_path, '%s.log' % self.calculation_type)
         out_file = open(out_file_path, 'r')
         output_energies = []
         for i, line in enumerate(out_file):
@@ -425,6 +438,12 @@ class Optimiser:
                     ecp_locator['functions_list'] = [{'coefficient': potential_variable_list[i][0],
                                                       'r^n': 1,
                                                       'exponent': potential_variable_list[i][1]}]
+                    if self.optimise_with_total_gap is True:
+                        self.basis.variable_file_path = os.path.join(self.gap_folder_path, 'basis')
+                        self.basis.update_variable(self.ecp_locators[i])
+                        logging.info('Updated ECP %s: coeff %s exp %s' % (ecp_locator['basis_ecp_name'],
+                                                                          potential_variable_list[i][0],
+                                                                          potential_variable_list[i][1]))
                     if self.calc_folder_path:
                         self.basis.variable_file_path = os.path.join(self.calc_folder_path, 'basis')
                     self.basis.update_variable(self.ecp_locators[i])
@@ -437,8 +456,22 @@ class Optimiser:
 
             # Update potential geometry
             if self.optimise_pseudo_geometry:
+                if self.optimise_with_total_gap:
+                    self.coord.coord_file_path = os.path.join(self.gap_folder_path, 'coord')
+                    self.coord.read_coords()
+                    for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
+                        if self.pseudo_geometry_type == 'sp2':
+                            self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1])
+                        elif self.pseudo_geometry_type == 'sp3':
+                            self.coord.set_potential_distance_to(pseudo_carbon, x0[-2])
+                        logging.info('Re-potentialised atom %s, with set distance %s, split %s' % (
+                            self.pseudo_geometry['indices_of_pseudo_carbons'],
+                            x0[-2],
+                            x0[-1]))
+
                 # self.coord.coord_list = []
-                # self.coord.read_coords()
+                self.coord.coord_file_path = os.path.join(self.calc_folder_path, 'coord')
+                self.coord.read_coords()
                 for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
                     if self.pseudo_geometry_type == 'sp2':
                         self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1])
@@ -488,6 +521,29 @@ class Optimiser:
             if self.optimise_with_total_energy is True:
                 read_total_energy = self.read_result(energy_type='total')
                 normalised_total = numpy.abs(read_total_energy - self.tracked_total_energy)
+
+            normalised_total_gap_error = 0.0
+            if self.optimise_with_total_gap is True:
+                # Run the other calc
+                if self.calculation_type == 'dscf':
+                    self.basis.run_dscf(add_to_log=True, file_path=self.gap_folder_path, shell=True)
+                elif self.calculation_type == 'ridft':
+                    self.basis.run_ridft(add_to_log=True, file_path=self.gap_folder_path, shell=True)
+                # read both energies
+                read_this_energy = self.read_result(energy_type='total')
+                read_that_energy = self.read_result(energy_type='total', supplied_folder_path=self.gap_folder_path)
+                # find difference
+                total_gap_energy_eh = read_that_energy - read_this_energy
+                total_gap_energy_ev = total_gap_energy_eh * 27.2113845 # Convert to eV as everything else is in eV
+                normalised_total_gap_error = numpy.abs(total_gap_energy_ev - self.tracked_total_gap) * self.total_gap_error_multiplier
+                logging.info('  Total gap between %s and %s: %s eV \n'
+                             '                        (error %s eV, multiplier %s)' %
+                             (self.calc_folder_path,
+                              self.gap_folder_path,
+                              total_gap_energy_ev,
+                              normalised_total_gap_error,
+                              self.total_gap_error_multiplier))
+
 
             # Collect ESCF results
             if self.optimise_with_fixed_excitations is True \
@@ -571,6 +627,7 @@ class Optimiser:
 
             total_error = sum(normalised_orbital_energies) * self.orbital_error_multiplier \
                 + normalised_homo_lumo_gap * self.homo_lumo_gap_error_multiplier \
+                + normalised_total_gap_error \
                 + gradient_error \
                 + normalised_total \
                 + normalised_excitation_energy \
@@ -604,7 +661,7 @@ class Optimiser:
             return total_error
 
         logging.info('Optimising potentials with: '
-                     '\n  - ecps %s %s %s %s %s %s %s %s' % (
+                     '\n  - ecps %s %s %s %s %s %s %s %s %s' % (
                      ', '.join(locator['basis_ecp_name'] for locator in self.ecp_locators),
                      '\n  - over irreps: %s' % ', '.join(tracked['irrep'] for tracked in self.tracked_orbitals) if self.tracked_orbitals else '',
                      '\n  - fixed excitations %s' % ', '.join(tracked['repr'] for tracked in self.tracked_excitations) if self.optimise_with_fixed_excitations else '',
@@ -612,6 +669,7 @@ class Optimiser:
                      '\n  - excitation spectra' if self.optimise_with_excitation_spectra else '',
                      '\n  - total energy' if self.optimise_with_total_energy else '',
                      '\n  - HOMO-LUMO gap' if self.optimise_with_homo_lumo_gap else '',
+                     '\n  - a total energy gap between this folder and %s' % str(self.gap_folder_path) if self.optimise_with_total_gap else '',
                      '\n  - variable pseudo-potential geometry' if self.optimise_pseudo_geometry else '')
                      )
 
