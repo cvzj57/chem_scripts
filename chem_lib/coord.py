@@ -49,7 +49,8 @@ class CoordControl:
         self.sp2_2e_potential_set_split_distance = 0.25
         self.sp3_pseudo_element = 'li'
         self.sp2_pseudo_element = 'he'
-        self.pseudo_carbon_basis = 'sless-SV(P)'
+        self.sp2_pseudo_carbon_basis = 'sless-SV(P)'
+        self.sp3_pseudo_carbon_basis = 'def-SV(P)'
         self.sp3_carbon_ecp = 'sp3-ecp-p'
         self.sp2_carbon_ecp = 'sp2-ecp-p'
         self.sp2_hydrogen_ecp = 'sp2-ecp-s'
@@ -343,9 +344,9 @@ class CoordControl:
         for potential_coord in new_potential_coords_list:
             self.write_coord(potential_coord, overwrite=True)
 
-        print('Re-potentialised atom %s, with set distance %s, split %s' % (atom_hash,
-                                                                            new_set_distance,
-                                                                            new_set_split_distance))
+        #print('Re-potentialised atom %s, with set distance %s, split %s' % (atom_hash,
+         #                                                                   new_set_distance,
+          #                                                                  new_set_split_distance))
 
     def set_potential_aperture_angle_to(self, atom_hash, new_distance):
         """Moves potentials around an atom to specified distance."""
@@ -593,19 +594,19 @@ class CoordControl:
         with open(os.path.join(define_cmds_path), 'w') as var_file:
             var_file.writelines(define_cmds % (
                 # sp2 potentials
-                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'b', self.sp2_pseudo_carbon_basis),
                 self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'ecp', self.sp2_carbon_ecp),
                 self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'b', 'none'),
                 self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'ecp', self.sp2_hydrogen_ecp),
                 # sp3 potentials
-                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp3_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp3_pseudocarbon_list], 'b', self.sp3_pseudo_carbon_basis),
                 self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp3_pseudocarbon_list], 'ecp', self.sp3_carbon_ecp),
                 self.supply_ecps_bases_to_define(self.sp3_pseudo_element, 'b', 'none'),
                 self.supply_ecps_bases_to_define(self.sp3_pseudo_element, 'ecp', self.sp3_hydrogen_ecp),
                 # sp2 2e potentials
                 self.supply_ecps_bases_to_define(self.sp2_pseudo_element, 'b', 'none'),
                 self.supply_ecps_bases_to_define([hydrogen['#'] for hydrogen in sp2_2e_pseudohydrogen_list], 'ecp', self.sp2_2e_hydrogen_ecp),
-                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_2e_pseudocarbon_list], 'b', self.pseudo_carbon_basis),
+                self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_2e_pseudocarbon_list], 'b', self.sp2_pseudo_carbon_basis),
                 self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_2e_pseudocarbon_list], 'ecp', self.sp2_2e_carbon_ecp),
             ))
 
@@ -819,9 +820,17 @@ if __name__ == "__main__":
     elif sys.argv[1] == 'repotentialise_sp2':
         for pseudo_atom in control.parse_coord_list(sys.argv[2]):
             control.repseudopotentialise_sp2_atom(pseudo_atom, float(sys.argv[3]), float(sys.argv[4]))
+
+        print('Re-potentialised atom %s, with set distance %s, split %s' % (control.parse_coord_list(sys.argv[2]),
+                                                                            float(sys.argv[3]),
+                                                                            float(sys.argv[4])))
     elif sys.argv[1] == 'repotentialise_sp3':
         for pseudo_atom in control.parse_coord_list(sys.argv[2]):
             control.set_potential_distance_to(pseudo_atom, float(sys.argv[3]))
+
+        print('Re-potentialised atoms %s, with set distance %s' % (control.parse_coord_list(sys.argv[2]),
+                                                                   float(sys.argv[3])))
+
     else:
         print('Incorrect sysargs given.')
 

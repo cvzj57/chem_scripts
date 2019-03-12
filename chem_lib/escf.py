@@ -29,8 +29,8 @@ class ESCFControl:
         self.dipole_scan_focus = 0.5
         self.undetectable_excitation_replacement_error = 3000.0
         self.undetectable_excitation_oscillator_replacement_error = 1000.0
-        self.l_min = 120
-        self.l_max = 180
+        self.l_min = 160
+        self.l_max = 280
         self.spyctrum_path = 'chem_scripts/spyctrum/spyctrum/spyctrum.py'
         self.convolution_path = 'convolution.csv'
         self.reference_convolution_path = 'ref_convolution.csv'

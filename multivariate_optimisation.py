@@ -20,10 +20,10 @@ empty_setup_file = {
                 '3) Switch on different optimisation criteria with the optimise_* keys '
                 '  and supply required reference data in tracked_* keys '
                 '4) Specify starting variables yourself (supply_own_starting_guesses) or give a number '
-                '  of random (Gaussian-weighted) seeds to generate '
+                '  of semi-random (Gaussian-weighted) seeds to generate '
                 '5) run the multivariate_optimisation.py script '
                 '6) Good luck.',
-    'calc_folder_path': '',
+    'calc_folder_path': '.',
     'optimise_pseudo_geometry': False,
     'pseudo_geometry_type': '',
     'optimise_with_orbitals': True,
@@ -105,6 +105,8 @@ class Optimiser:
         self.calculation_type = 'dscf'
         self.calc_folder_path = '.'
         self.iterations = 0
+        self.current_seed = 0
+        self.moo_data_directory = 'moo_data'
         # optimisation specs
         self.ecp_locators = []
 
@@ -309,7 +311,7 @@ class Optimiser:
         logging.info("increasing scfiterlimit...")
         command = 'kdg scfiterlimit'
         subprocess.call(command, shell=True)
-        command = 'adg scfiterlimit 300'
+        command = 'adg scfiterlimit 3000'
         subprocess.call(command, shell=True)
 
     def read_result(self, energy_type=None, orbital_to_read=None):
@@ -405,7 +407,7 @@ class Optimiser:
             """Takes array of coeffs and exps, maps them to and updates their ecps, runs the calculation and
                reads the results from calc.log. It then normalises and returns the results as a list."""
             self.iterations += 1
-            logging.info('\n===== Optimisation iteration: %s =====' % self.iterations)
+            logging.info('\n============ Optimisation iteration: %s (Seed %s) ============' % (self.iterations, self.current_seed))
 
             potential_variable_list = []
             if self.optimise_pseudo_geometry:
@@ -450,6 +452,7 @@ class Optimiser:
             self.clear_actual()
             self.clear_mos()
             self.increase_scfiterlimit()
+            self.remove_files(['moments'])
 
             # Run the calculation
             if self.calculation_type == 'dscf':
@@ -461,9 +464,10 @@ class Optimiser:
 
             # Read orbital energies
             read_orbital_energies = []
-            for tracked_orbital in self.tracked_orbitals:
-                read_orbital_energies.append(self.read_result(energy_type='orbital',
-                                                              orbital_to_read=tracked_orbital))
+            if self.optimise_with_orbitals is True:
+                for tracked_orbital in self.tracked_orbitals:
+                    read_orbital_energies.append(self.read_result(energy_type='orbital',
+                                                                  orbital_to_read=tracked_orbital))
             # Normalise orbitals
             normalised_orbital_energies = []
             if self.optimise_with_orbitals is True:
@@ -578,11 +582,6 @@ class Optimiser:
 
             logging.info('\nTotal error: %s eV\n' % str(total_error))
 
-            leading_iteration = "{:03}".format(self.iterations)
-            command = 'mkdir moo_iterations/iteration_%s; cp * moo_iterations/iteration_%s' % (leading_iteration,
-                                                                                               leading_iteration)
-            subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
             # Plot spectral optimisation
             if self.optimise_with_excitation_spectra:
                 escf_control = ESCFControl()
@@ -597,16 +596,17 @@ class Optimiser:
                 plt.plot(x_ps, y_ps, linestyle="dashed")
                 plt.xlabel('Wavelength (nm)')
                 plt.ylabel('Intensity of absorption (arb. units)')
-                plt.text(900, 2.5, 'Iteration: %s' % "{:03}".format(self.iterations))
-                plt.savefig('moo_iterations/spectracomp_%s.png' % leading_iteration)
+                plt.text(900, 2.5, 'Iteration: %s' % "{:05}".format(self.iterations))
+                leading_iteration = "{:05}".format(self.iterations)
+                plt.savefig('%s/spectracomp_%s.png' % (self.moo_data_directory, leading_iteration))
                 plt.gcf().clear()
 
             return total_error
 
         logging.info('Optimising potentials with: '
-                     '\n  - ecps %s over irreps %s %s %s %s %s %s %s' % (
+                     '\n  - ecps %s %s %s %s %s %s %s %s' % (
                      ', '.join(locator['basis_ecp_name'] for locator in self.ecp_locators),
-                     ', '.join(tracked['irrep'] for tracked in self.tracked_orbitals),
+                     '\n  - over irreps: %s' % ', '.join(tracked['irrep'] for tracked in self.tracked_orbitals) if self.tracked_orbitals else '',
                      '\n  - fixed excitations %s' % ', '.join(tracked['repr'] for tracked in self.tracked_excitations) if self.optimise_with_fixed_excitations else '',
                      '\n  - flexible excitations with dipole norms: %s' % str([tracked['electric_dipole_norm'] for tracked in self.tracked_excitations]) if self.optimise_with_flexible_excitations else '',
                      '\n  - excitation spectra' if self.optimise_with_excitation_spectra else '',
@@ -615,7 +615,7 @@ class Optimiser:
                      '\n  - variable pseudo-potential geometry' if self.optimise_pseudo_geometry else '')
                      )
 
-        subprocess.call('rm -rf moo_iterations; mkdir moo_iterations', shell=True)
+        subprocess.call('rm -rf %s; mkdir %s' % (self.moo_data_directory, self.moo_data_directory), shell=True)
 
         #                         coefficient   exponent
         single_potential_bounds = (-50, 50), (0.001, 50)
@@ -656,6 +656,8 @@ class Optimiser:
                             return seed_guess
 
                 for seed in range(self.initial_seed_number):
+                    self.current_seed += 1
+                    logging.info('\n============ Seed: %s ============' % self.current_seed)
                     initial_guesses = []
                     for index, bounds_set in enumerate(all_bounds):
                         #variable_guess = numpy.random.uniform(low=bounds_set[0], high=bounds_set[1])
@@ -677,12 +679,29 @@ class Optimiser:
                                                        )
 
                     min_test['moo_iteration'] = self.iterations
+                    min_test['seed_number'] = self.current_seed
                     results_dicts_all_seeds.append(min_test)
                     logging.info(min_test)
 
                     sorted_results = sorted(results_dicts_all_seeds, key=lambda k: k['fun'])
-                    logging.info('Ran optimisation with %s initial seed(s), best result was: \n %s' %
-                                 (self.initial_seed_number, sorted_results[0]))
+                    logging.info('Ran optimisation with %s initial seed(s), best result: \n %s' %
+                                 (self.current_seed, sorted_results[0]))
+
+                    with open('seed_results.moo', 'w') as seed_result_file:
+                        try:
+                            seed_result_file.write('%s MOO seed results, smallest to largest total error:\n'
+                                                   % self.current_seed)
+                            seed_result_file.write('%s \n' % [sorted_result for sorted_result in sorted_results])
+                        except Exception as e:
+                            seed_result_file.write('%s' % e)
+                            seed_result_file.close()
+
+                    leading_iteration = "{:05}".format(self.iterations)
+                    command = 'mkdir %s/iteration_%s; cp * %s/iteration_%s' % (self.moo_data_directory,
+                                                                               leading_iteration,
+                                                                               self.moo_data_directory,
+                                                                               leading_iteration)
+                    subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             else:
                 logging.info('Running with specified starting guesses: ' % array_of_potentials)
@@ -705,7 +724,7 @@ class Optimiser:
                 filenames = []
                 if self.iterations > 10:
                     for i in range(1, self.iterations):
-                        filenames.append('moo_iterations/spectracomp_' + "{:03}".format(i) + '.png')
+                        filenames.append('%s/spectracomp_' % self.moo_data_directory + "{:05}".format(i) + '.png')
                     images = []
                     for filename in filenames:
                         images.append(imageio.imread(filename))
