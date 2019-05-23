@@ -24,7 +24,7 @@ empty_setup_file = {
                 '5) run the multivariate_optimisation.py script '
                 '6) Good luck.',
     'calc_folder_path': '.',
-    'optimise_pseudo_geometry': False,
+    'optimise_pseudo_geometry': True,
     'pseudo_geometry_type': '',
     'optimise_with_orbitals': True,
     'optimise_with_total_energy': False,
@@ -32,6 +32,7 @@ empty_setup_file = {
     'optimise_with_flexible_excitations': False,
     'optimise_with_excitation_spectra': False,
     'optimise_with_homo_lumo_gap': False,
+    "optimise_with_total_gaps": False,
     'pseudo_geometry': {
         'indices_of_pseudo_carbons': [1],
         'potential_set_distance_guess': 0.5,
@@ -71,7 +72,17 @@ empty_setup_file = {
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
     'initial_guesses': [0.1, 0.1, 0.1, 0.1],
     'seeded_optimisation': False,
-    'initial_seed_number': 1
+    'initial_seed_number': 1,
+    "tracked_total_gaps": [
+        {
+            "reference_gap_energy": 3.53295493,
+            "gap_folder_path": "triplet"
+        },
+        {
+            "reference_gap_energy": 9.09111851,
+            "gap_folder_path": "cation"
+        }
+    ]
 }
 
 # set up logging to file - see previous section for more details
@@ -459,6 +470,7 @@ class Optimiser:
                 if self.optimise_with_total_gaps:
                     for tracked_total_gap in self.tracked_total_gaps:
                         self.coord.coord_file_path = os.path.join(tracked_total_gap['gap_folder_path'], 'coord')
+                        self.coord.coord_list = []
                         self.coord.read_coords()
                         for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
                             if self.pseudo_geometry_type == 'sp2':
@@ -472,6 +484,7 @@ class Optimiser:
 
                 # self.coord.coord_list = []
                 self.coord.coord_file_path = os.path.join(self.calc_folder_path, 'coord')
+                self.coord.coord_list = []
                 self.coord.read_coords()
                 for pseudo_carbon in self.pseudo_geometry['indices_of_pseudo_carbons']:
                     if self.pseudo_geometry_type == 'sp2':
@@ -756,7 +769,8 @@ class Optimiser:
                         try:
                             seed_result_file.write('%s MOO seed results, smallest to largest total error:\n'
                                                    % self.current_seed)
-                            seed_result_file.write('%s \n' % [sorted_result for sorted_result in sorted_results])
+
+                            seed_result_file.write('%s \n\n ' % [sorted_result for sorted_result in sorted_results])
                         except Exception as e:
                             seed_result_file.write('%s' % e)
                             seed_result_file.close()

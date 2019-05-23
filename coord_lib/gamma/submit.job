@@ -1,0 +1,53 @@
+#!/bin/sh
+#
+#$ -N gammapot_testjob
+#
+#$ -l h_cpu=200:00:00
+#$ -l s_cpu=199:55:00
+#$ -l s_vmem=1900M
+#$ -P ctom
+#$ -pe mpi 16
+#
+#$ -cwd
+#$ -S /bin/sh
+
+. /share/programs/bin/functions_jobs.sh
+
+#trap 'CleanExit 15' 15
+#trap 'CleanExit 24' 24
+#trap 'CleanExit 30' 30
+#trap 'CleanExit 31' 31
+
+export PARNODES=$(( ${NSLOTS} - 0 ))
+export PARA_ARCH=SMP
+
+export HOSTS_FILE=./hostsfile
+rm ${HOSTS_FILE}
+for ((i=1; i<=${PARNODES}; i=${i}+1))
+do
+  hostname  >> ${HOSTS_FILE}
+done
+
+module unload turbomole
+module   load tm7.3_smp
+
+echo "Variables"
+echo "Job Name          : ${JOB_NAME}"
+echo "Home              : ${SGE_O_HOME}"
+echo "Submitted  from   : ${SGE_O_HOST}"
+echo "WorkDir           : ${SGE_O_WORKDIR}"
+echo "TMPDIR            : ${TMPDIR}"
+echo "I am in           : ${PWD}"
+echo "  CORES           : ${PARNODES}"
+
+#synchronize the working directory and the scratch
+CleanStart
+cd ${TMPDIR}
+
+###BEGIN_COMMANDS
+dscf > dscf.out
+eiger > eiger.out
+###END_COMMANDS
+
+CleanExit
+

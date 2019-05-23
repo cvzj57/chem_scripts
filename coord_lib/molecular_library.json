@@ -1,0 +1,83 @@
+{
+  "alpha": [
+    {
+      "coord_file_name": "c2h4",
+      "atoms_to_potentialise": "1,2",
+      "total_es": 2
+    },
+    {
+      "coord_file_name": "c4h6",
+      "atoms_to_potentialise": "1-4",
+      "total_es": 4
+    },
+    {
+      "coord_file_name": "c6h8",
+      "atoms_to_potentialise": "1-6",
+      "total_es": 6
+    },
+    {
+      "coord_file_name": "c8h10",
+      "atoms_to_potentialise": "1-8",
+      "total_es": 8
+    },
+    {
+      "coord_file_name": "c10h12",
+      "atoms_to_potentialise": "1-10",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "c12h14",
+      "atoms_to_potentialise": "1-12",
+      "total_es": 12
+    },
+    {
+      "coord_file_name": "rings1",
+      "atoms_to_potentialise": "1-6",
+      "total_es": 6
+    }
+  ],
+  "beta": [],
+  "gamma": [
+    {
+      "coord_file_name": "c2h4o",
+      "atoms_to_potentialise": "3",
+      "total_es": 16
+    },
+    {
+      "coord_file_name": "c9h8o4",
+      "atoms_to_potentialise": "13",
+      "total_es": 86
+    },
+    {
+      "coord_file_name": "ch3ch3",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch3cooh",
+      "atoms_to_potentialise": "4",
+      "total_es": 24
+    },
+    {
+      "coord_file_name": "ch3nh2",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch3oh",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch4",
+      "atoms_to_potentialise": "1",
+      "total_es": 2
+    },
+    {
+      "coord_file_name": "claupch33",
+      "atoms_to_potentialise": "2-4",
+      "total_es": 54
+    }
+  ],
+  "delta": []
+}
