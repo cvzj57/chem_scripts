@@ -351,6 +351,32 @@ class CoordControl:
                      'z': vector[2] + atom_to_repotentialise[2]},
                 )
 
+        # Now handle beta-type potentials. The guess function supplies 6 s pots then deletes the pair nearest the
+        # bonding neighbour. Do the same. Problem is how to identify bonding neighbour.
+        # Can we work out which neighbour atom doesn't have potentials in its direction?
+        # Yes. Measure angle between s pot and neighbour, then do for all s pots and neighbours and sum the results.
+        # The neighbour with the largest sum of angles is the bonding neighbour, as it has no potentials in its direction.
+
+        # carbon_pseudos = self.identify_pseudocarbon_potentials(atom_hash)
+        # if len(carbon_pseudos) == 4:
+        #
+        #     distanced_nonpsnonh_list = self.order_atoms_by_distance_from(atom_hash, element='!pseudo')
+        #     nonpsnonhs_bonded_to_this_atom = [distanced_atom for distanced_atom in distanced_nonpsnonh_list[1:5] if
+        #                                       self.measure_atom_atom_dist(atom_hash, distanced_atom[
+        #                                           '#']) < self.bond_deciding_distance]
+        #     print("Carbons bonded to atom %s: %s" % (str(atom_hash),
+        #                                              str([nonpsnonh['#'] for nonpsnonh in nonpsnonhs_bonded_to_this_atom])))
+        #     for nonpsnonh_bonded_to_this_atom in nonpsnonhs_bonded_to_this_atom:
+        #         # If this carbon has a neighbour not in the sp2 list, we know this must be a 2e carbon!
+        #         if nonpsnonh_bonded_to_this_atom not in sp2_pseudocarbon_list:
+        #             def distance_from(list_atom):
+        #                 return self.measure_atom_atom_dist(nonpsnonh_bonded_to_this_atom['#'], list_atom['#'])
+        #             carbon_pseudos = self.identify_pseudocarbon_potentials(atom['#'])
+        #             # find pseudos closest to the other atom
+        #             pseudos_distanced_from_sp2_2e = sorted(carbon_pseudos, key=distance_from)
+        #             pseudopotential_hashes_to_delete.append(pseudos_distanced_from_sp2_2e[0]['#'])
+        #             pseudopotential_hashes_to_delete.append(pseudos_distanced_from_sp2_2e[1]['#'])
+
         # Now add potentials to coord list, we must overwrite the original potentials using their hashes.
         # This stops the ECP and basis assignments being invalidated.
         for potential_coord in new_potential_coords_list:

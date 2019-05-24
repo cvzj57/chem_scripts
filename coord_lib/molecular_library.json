@@ -31,9 +31,59 @@
       "total_es": 12
     },
     {
+      "coord_file_name": "c20h22",
+      "atoms_to_potentialise": "1-20",
+      "total_es": 20
+    },
+    {
+      "coord_file_name": "c30h32",
+      "atoms_to_potentialise": "1-30",
+      "total_es": 30
+    },
+    {
+      "coord_file_name": "c40h42",
+      "atoms_to_potentialise": "1-40",
+      "total_es": 40
+    },
+    {
+      "coord_file_name": "c50h52",
+      "atoms_to_potentialise": "1-50",
+      "total_es": 50
+    },
+    {
+      "coord_file_name": "c100h102",
+      "atoms_to_potentialise": "1-100",
+      "total_es": 100
+    },
+    {
       "coord_file_name": "rings1",
       "atoms_to_potentialise": "1-6",
       "total_es": 6
+    },
+    {
+      "coord_file_name": "rings2",
+      "atoms_to_potentialise": "1-10",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "rings3",
+      "atoms_to_potentialise": "1-14",
+      "total_es": 14
+    },
+    {
+      "coord_file_name": "rings4",
+      "atoms_to_potentialise": "1-16",
+      "total_es": 16
+    },
+    {
+      "coord_file_name": "rings6",
+      "atoms_to_potentialise": "1-24",
+      "total_es": 24
+    },
+    {
+      "coord_file_name": "rings19",
+      "atoms_to_potentialise": "1-54",
+      "total_es": 54
     }
   ],
   "beta": [],
@@ -41,7 +91,7 @@
     {
       "coord_file_name": "c2h4o",
       "atoms_to_potentialise": "3",
-      "total_es": 16
+      "total_es": 24
     },
     {
       "coord_file_name": "c9h8o4",

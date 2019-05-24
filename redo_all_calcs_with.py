@@ -79,6 +79,7 @@ setup_cmds = '''
 
 
 a coord
+sy %s
 *
 no
 *
@@ -97,7 +98,7 @@ s
 class CalculationRunner:
     def __init__(self):
         self.functional_list = ['hf', 'pbe', 'pbe0', 'tpss', 'tpssh', 'b3-lyp']
-        self.occupation_setup_list = ['singlet_uhf', 'triplet', 'cation', 'tddft']
+        self.occupation_setup_list = ['singlet_uhf', 'triplet', 'cation', 'tddft_urpa', 'tddft_ucis']
         self.potentialisation = 'alpha'
         self.symmetry = 'cs'
         self.run_jobs = True
@@ -106,6 +107,7 @@ class CalculationRunner:
         self.occ_orb_sym = 'a\"'
         self.ex_symmetry = 'a\''
         self.scfinstab = 'urpa'
+        self.scfinstab_list = ['urpa', 'ucis']
         with open(os.path.dirname(os.path.realpath(__file__))+'/coord_lib/molecular_library.json', 'r') as json_file:
             self.molecule_library = json.load(json_file)
 
@@ -208,13 +210,14 @@ class CalculationRunner:
         if functional_name is not 'hf':
             control_file = open(os.path.join(calc_path, 'control'), 'r')
             control_file_data = control_file.readlines()
-            control_file_data.insert(-1, '%s\n%s\n%s\n' % ('$dft', ' func %s' % functional_name, ' grid m4'))
+            control_file_data.insert(-1, '%s\n%s\n%s\n' % ('$dft', ' functional %s' % functional_name, ' gridsize m4'))
             with open(os.path.join(calc_path, 'control'), 'w') as control_file:
                 control_file.writelines(control_file_data)
             control_file.close()
         return
 
     def run(self, supplied_basis_file, molecule_set, set_dist, split_dist=0.25):
+        '''Run calcs for the specified test set with the specified pseudo-potentials.'''
         # read list of molecules to create
         molecule_list = self.molecule_library[molecule_set]
         #molecule_list = example_mol_list
@@ -245,7 +248,6 @@ class CalculationRunner:
                             os.path.join(singlet_path, 'coord'))
                 shutil.copy(os.path.join(this_script_path, self.coordlib_path, molecule_set, 'submit.job'),
                             singlet_path)
-                shutil.copy(supplied_basis_file, singlet_path)
 
                 # run the guess script for each coord file
                 print('Working out where your potentials are...')
@@ -266,7 +268,7 @@ class CalculationRunner:
                     for pseudo_atom in parsed_atoms_to_potentialise:
                         coord.set_potential_distance_to(pseudo_atom, set_dist)
                 # set pseudopotential values
-                shutil.copy(supplied_basis_file, singlet_path)
+                shutil.copy(supplied_basis_file, os.path.join(singlet_path, 'basis'))
 
                 # set any extra parameters functional
                 print('Adding DFT functionals...')
@@ -283,7 +285,8 @@ class CalculationRunner:
                 # copy to triplet, cation, tddft and set occupations
                 triplet_path = os.path.join(molname, functional_name, 'triplet')
                 cation_path = os.path.join(molname, functional_name, 'cation')
-                tddft_path = os.path.join(molname, functional_name, 'tddft')
+                tddft_urpa_path = os.path.join(molname, functional_name, 'tddft_urpa')
+                tddft_ucis_path = os.path.join(molname, functional_name, 'tddft_ucis')
 
                 if 'triplet' in self.occupation_setup_list:
                     print('Creating triplet...')
@@ -295,11 +298,17 @@ class CalculationRunner:
                     shutil.copytree(singlet_path, cation_path)
                     self.add_occupation(cation_path, molecule['total_es'], 'cation', self.occ_orb_sym)
 
-                if 'tddft' in self.occupation_setup_list:
+                if 'tddft_urpa' in self.occupation_setup_list:
                     print('Creating TDDFT calc...')
-                    shutil.copytree(singlet_path, tddft_path)
-                    self.add_occupation(tddft_path, molecule['total_es'], 'singlet_uhf', self.occ_orb_sym)
-                    self.add_tddft_excitation(tddft_path, self.ex_symmetry, self.scfinstab)
+                    shutil.copytree(singlet_path, tddft_urpa_path)
+                    self.add_occupation(tddft_urpa_path, molecule['total_es'], 'singlet_uhf', self.occ_orb_sym)
+                    self.add_tddft_excitation(tddft_urpa_path, self.ex_symmetry, 'urpa')
+
+                if 'tddft_ucis' in self.occupation_setup_list:
+                    print('Creating TDDFT calc...')
+                    shutil.copytree(singlet_path, tddft_ucis_path)
+                    self.add_occupation(tddft_ucis_path, molecule['total_es'], 'singlet_uhf', self.occ_orb_sym)
+                    self.add_tddft_excitation(tddft_ucis_path, self.ex_symmetry, 'ucis')
 
                 # Now the singlet occ
                 self.add_occupation(singlet_path, molecule['total_es'], 'singlet_uhf', self.occ_orb_sym)
@@ -311,13 +320,16 @@ class CalculationRunner:
                         subprocess.call(self.qsub_command, shell=True, cwd=triplet_path)
                     if 'cation' in self.occupation_setup_list:
                         subprocess.call(self.qsub_command, shell=True, cwd=cation_path)
-                    if 'tddft' in self.occupation_setup_list:
-                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_path)
+                    if 'tddft_urpa' in self.occupation_setup_list:
+                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_urpa_path)
+                    if 'tddft_ucis' in self.occupation_setup_list:
+                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_ucis_path)
 
         os.chdir('..')
         return
 
     def reference_run(self, molecule_set):
+        '''Do an all-electron run with the specified test set.'''
         # read list of molecules to create
         molecule_list = self.molecule_library[molecule_set]
         # molecule_list = example_mol_list
@@ -350,10 +362,6 @@ class CalculationRunner:
                 print('Adding DFT functionals...')
                 self.add_dft_functional(singlet_path, functional_name)
 
-                # set symmetry
-                print('Updating symmetry...')
-                self.set_symmetry(singlet_path, self.symmetry)
-
                 # increase iterlimit
                 print('Increasing iterlimit...')
                 self.increase_scfiterlimit(singlet_path)
@@ -361,13 +369,14 @@ class CalculationRunner:
                 # copy to triplet, cation, tddft and set occupations
                 triplet_path = os.path.join(molname, functional_name, 'triplet')
                 cation_path = os.path.join(molname, functional_name, 'cation')
-                tddft_path = os.path.join(molname, functional_name, 'tddft')
+                tddft_urpa_path = os.path.join(molname, functional_name, 'tddft_urpa')
+                tddft_ucis_path = os.path.join(molname, functional_name, 'tddft_ucis')
 
                 if 'triplet' in self.occupation_setup_list:
                     print('Creating triplet...')
                     shutil.copytree(singlet_path, triplet_path)
                     if self.symmetry == 'cs':
-                        pass
+                        self.alle_assign_occ_manually(triplet_path, 'triplet')
                     else:
                         self.alle_swap_to_triplet(triplet_path)
 
@@ -375,17 +384,19 @@ class CalculationRunner:
                     print('Creating cation...')
                     shutil.copytree(singlet_path, cation_path)
                     if self.symmetry == 'cs':
-                        pass
+                        self.alle_assign_occ_manually(cation_path, 'cation')
                     else:
                         self.alle_swap_to_cation(cation_path)
 
-                if 'tddft' in self.occupation_setup_list:
+                if 'tddft_urpa' in self.occupation_setup_list:
                     print('Creating TDDFT calc...')
-                    shutil.copytree(singlet_path, tddft_path)
-                    self.add_tddft_excitation(tddft_path, self.ex_symmetry, self.scfinstab)
+                    shutil.copytree(singlet_path, tddft_urpa_path)
+                    self.add_tddft_excitation(tddft_urpa_path, self.ex_symmetry, 'urpa')
 
-                # Now the singlet occ
-                self.add_occupation(singlet_path, molecule['total_es'], 'singlet_uhf', self.occ_orb_sym)
+                if 'tddft_ucis' in self.occupation_setup_list:
+                    print('Creating TDDFT calc...')
+                    shutil.copytree(singlet_path, tddft_ucis_path)
+                    self.add_tddft_excitation(tddft_ucis_path, self.ex_symmetry, 'ucis')
 
                 # run calcs if desired
                 if self.run_jobs is True:
@@ -394,10 +405,64 @@ class CalculationRunner:
                         subprocess.call(self.qsub_command, shell=True, cwd=triplet_path)
                     if 'cation' in self.occupation_setup_list:
                         subprocess.call(self.qsub_command, shell=True, cwd=cation_path)
-                    if 'tddft' in self.occupation_setup_list:
-                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_path)
+                    if 'tddft_urpa' in self.occupation_setup_list:
+                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_urpa_path)
+                    if 'tddft_ucis' in self.occupation_setup_list:
+                        subprocess.call(self.qsub_command, shell=True, cwd=tddft_ucis_path)
 
         os.chdir('..')
+        return
+
+    def alle_assign_occ_manually(self, calc_path, occ_type, orbital_symgroup='a\"'):
+        control_file = open(os.path.join(calc_path, 'control'), 'r')
+        control_file_data = control_file.readlines()
+
+        alpha_pi_occ = int(next(line for line in control_file_data if 'a\"' in line).split()[1].split('-')[-1])
+        alpha_sigma_occ = int(next(line for line in control_file_data if 'a\'' in line).split()[1].split('-')[-1])
+        total_es = alpha_pi_occ*2
+
+        if occ_type == 'singlet_uhf':
+            alpha = beta = total_es/2
+        elif occ_type == 'triplet':
+            alpha = total_es/2+1
+            beta = total_es/2-1
+        elif occ_type == 'cation':
+            alpha = total_es/2
+            beta = total_es/2-1
+
+        alpha_sigma_orb_syntax = ' a\' %s (1)' % ('1-%s' % str(alpha_sigma_occ))
+        alpha_pi_orb_syntax = ' %s %s (1)' % (orbital_symgroup, '1-%s' % str(int(alpha)))
+        beta_sigma_orb_syntax = ' a\' %s (1)' % ('1-%s' % str(alpha_sigma_occ))
+        beta_pi_orb_syntax = ' %s %s (1)' % (orbital_symgroup, '1-%s' % str(int(beta)))
+
+        if total_es == 2 and (occ_type == 'triplet' or occ_type == 'cation'):
+            beta_pi_orb_syntax = ''
+
+        lines_to_remove = [line for line in control_file_data if 'a\"' in line
+                           or 'a\'' in line
+                           or '$alpha' in line
+                           or '$beta' in line
+                           or '$uhfmo_alpha' in line
+                           or '$uhfmo_beta' in line]
+
+        for line in lines_to_remove:
+            control_file_data.remove(line)
+
+        control_file_data.insert(-1, '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' % (
+                                                                       # '$uhf',
+                                                                       '$uhfmo_alpha none file=alpha',
+                                                                       '$uhfmo_beta none file=beta',
+                                                                       '$alpha shells',
+                                                                       alpha_sigma_orb_syntax,
+                                                                       alpha_pi_orb_syntax,
+                                                                       '$beta shells',
+                                                                       beta_sigma_orb_syntax,
+                                                                       beta_pi_orb_syntax))
+
+        with open(os.path.join(calc_path, 'control'), 'w') as control_file:
+            control_file.writelines(control_file_data)
+        control_file.close()
+
         return
 
     def alle_singlet_uhf_setup(self, calc_path):
@@ -405,7 +470,7 @@ class CalculationRunner:
         define_cmds_path = 'setup_cmds'
 
         with open(os.path.join(calc_path, define_cmds_path), 'w') as var_file:
-            var_file.writelines(setup_cmds)
+            var_file.writelines(setup_cmds % self.symmetry)
         var_file.close()
 
         command = 'define < %s' % define_cmds_path
@@ -450,6 +515,9 @@ class CalculationRunner:
         subprocess.call(homo_command, shell=True)
         subprocess.call(tddft_command, shell=True)
 
+        error_command = "grep -r \"TITLE\" */*/*/dscf_problem > error_check.dat"
+        subprocess.call(error_command, shell=True)
+
         import csv
 
         #process grep results
@@ -491,8 +559,13 @@ class CalculationRunner:
             occ_type = path_part[2]
             ex_e = line.split()[-1]
 
-            row = [molname, functional, occ_type, ex_e]
-            data_dict[molname][functional][occ_type] = ex_e
+            if 'urpa' in occ_type:
+                row = [molname, functional, 'TDDFT_urpa', ex_e]
+                data_dict[molname][functional]['TDDFT_urpa'] = ex_e
+            elif 'ucis' in occ_type:
+                row = [molname, functional, 'TDDFT_ucis', ex_e]
+                data_dict[molname][functional]['TDDFT_urpa'] = ex_e
+
             csv_rows.append(row)
 
         for line in homos_file_data:
@@ -501,7 +574,7 @@ class CalculationRunner:
             functional = path_part[1]
             homo_e = line.split()[-5]
 
-            row = [path_part[0], path_part[1], 'singlet_HOMO', homo_e]
+            row = [molname, functional, 'singlet_HOMO', homo_e]
             data_dict[molname][functional]['singlet_HOMO'] = homo_e
             csv_rows.append(row)
 
@@ -511,14 +584,16 @@ class CalculationRunner:
             average_t_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('triplet', 0)) for molecule in data_dict) / len(data_dict)
             average_c_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('cation', 0)) for molecule in data_dict) / len(data_dict)
             average_homo_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('singlet_HOMO', 0)) for molecule in data_dict) / len(data_dict)
-            average_tddft_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('tddft', 0)) for molecule in data_dict) / len(data_dict)
+            average_tddft_urpa_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('TDDFT_urpa', 0)) for molecule in data_dict) / len(data_dict)
+            average_tddft_ucis_e = sum(float(data_dict.get(molecule, 0).get(functional, 0).get('TDDFT_ucis', 0)) for molecule in data_dict) / len(data_dict)
             csv_rows.append([functional, 'average singlet E', average_s_e])
             csv_rows.append([functional, 'average triplet E', average_t_e])
             csv_rows.append([functional, 'average cation E', average_c_e])
             csv_rows.append([functional, 'average st gap E', average_t_e - average_s_e])
             csv_rows.append([functional, 'average ionisation E', average_c_e - average_s_e])
             csv_rows.append([functional, 'average HOMO E', average_homo_e])
-            csv_rows.append([functional, 'average TDDFT E', average_tddft_e])
+            csv_rows.append([functional, 'average TDDFT urpa E', average_tddft_urpa_e])
+            csv_rows.append([functional, 'average TDDFT ucis E', average_tddft_ucis_e])
 
         with open('results.csv', 'w') as writeFile:
             writer = csv.writer(writeFile)
@@ -544,4 +619,11 @@ if __name__ == "__main__":
     elif 'ref' in sys.argv:
         calcrunner.reference_run(sys.argv[2])
     else:
-        calcrunner.run(sys.argv[1], sys.argv[2], sys.argv[3])
+        kwargs = {'supplied_basis_file': sys.argv[1],
+                  'molecule_set': sys.argv[2],
+                  'set_dist': sys.argv[3]}
+        try:
+            kwargs['split_dist'] = sys.argv[4]
+        except ValueError:
+            print('No set split distance specified...')
+        calcrunner.run(kwargs)
