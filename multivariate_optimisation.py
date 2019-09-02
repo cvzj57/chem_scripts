@@ -157,7 +157,6 @@ class Optimiser:
         with open(os.path.dirname(os.path.realpath(__file__))+'/chem_lib/optimiser_orbital_library.json', 'r') as json_file:
             self.orbital_library = json.load(json_file)
 
-
     def run(self):
         logging.info(
             '''
@@ -171,11 +170,11 @@ class Optimiser:
             #######################################
             ''')
         opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
-        if not os.path.isfile(opt_data_path):
-            logging.info('No moo file, running setup...')
-            self.setup_menu()
-        else:
-            logging.info('moo file found.')
+        #if not os.path.isfile(opt_data_path):
+        #    logging.info('No moo file, running setup...')
+        #    self.setup_menu()
+        #else:
+        #    logging.info('moo file found.')
         optdata = None
         try:
             with open(opt_data_path, 'r') as opt_data_file:
@@ -219,9 +218,9 @@ class Optimiser:
                 except Exception as e:
                     error_file.write('%s' % e)
             error_file.close()
-        else:
-            if input('Run now? y/n: ') == 'y':
-                self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
+        #else:
+        #    if input('Run now? y/n: ') == 'y':
+        #        self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
 
     def setup_menu(self):
         setup_file = empty_setup_file
@@ -491,6 +490,9 @@ class Optimiser:
                         self.coord.repseudopotentialise_sp2_atom(pseudo_carbon, x0[-2], x0[-1])
                     elif self.pseudo_geometry_type == 'sp3':
                         self.coord.set_potential_distance_to(pseudo_carbon, x0[-2])
+                    else:
+                        logging.info('ERROR: Pseudo-geometry unspecified! Please set pseudo_geometry_type key!')
+                        return
                     logging.info('Re-potentialised atom %s, with set distance %s, split %s' % (
                         self.pseudo_geometry['indices_of_pseudo_carbons'],
                         x0[-2],
