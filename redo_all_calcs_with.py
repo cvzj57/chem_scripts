@@ -61,7 +61,6 @@ t
 ref_to_i_cmds = '''
 
 
-
 y
 eht
 
@@ -100,12 +99,12 @@ class CalculationRunner:
         self.functional_list = ['hf', 'pbe', 'pbe0', 'tpss', 'tpssh', 'b3-lyp']
         self.occupation_setup_list = ['singlet_uhf', 'triplet', 'cation', 'tddft_urpa', 'tddft_ucis']
         self.potentialisation = 'alpha'
-        self.symmetry = 'cs'
+        self.symmetry = 'c1'
         self.run_jobs = True
         self.qsub_command = 'qsub submit.job'
         self.coordlib_path = 'coord_lib'
-        self.occ_orb_sym = 'a\"'
-        self.ex_symmetry = 'a\''
+        self.occ_orb_sym = 'a'
+        self.ex_symmetry = 'a'
         self.scfinstab = 'urpa'
         self.scfinstab_list = ['urpa', 'ucis']
         with open(os.path.dirname(os.path.realpath(__file__))+'/coord_lib/molecular_library.json', 'r') as json_file:
@@ -222,12 +221,9 @@ class CalculationRunner:
         molecule_list = self.molecule_library[molecule_set]
         #molecule_list = example_mol_list
 
-        # read potentials to use
-
-        # create folder structure with s,t etc and all functionals and copy all-e coords into folders
-
         coord = CoordControl()
 
+        # Create testing folder
         this_script_path = os.path.dirname(os.path.realpath(__file__))
         test_folder_name = 'test_%s_%s' % (molecule_set, supplied_basis_file)
         os.mkdir(test_folder_name)
@@ -235,6 +231,7 @@ class CalculationRunner:
         os.chdir(test_folder_name)
 
         for molecule in molecule_list:
+            # Create molecule paths
             molname = molecule['coord_file_name']
             print('Creating pseudo-%ss..' % molname)
             os.mkdir(molname)
@@ -502,15 +499,11 @@ class CalculationRunner:
         return
 
     def gather_results(self):
-        # gather results. what's the best format?
-        # Can output all results into csv. But also can gether them into a list of dicts for each molecule with respect s, t, ie energies.
-        # this can be easily manipulated for averages, etc. though I need the all-e input somehow too.
-        # Maybe it would be easier just to calculate the all-e mols too?
-        # No. Difference of means = mean difference. If I work out the ref average result for a test set, I can subtract the result from my pseudo average
+        """Gather results with grep, feed results into dict so I can calc all the differences and averages, output to CSV"""
 
         totals_command = "grep -r \"  total energy\" */*/*/dscf.out > dscf_totals.dat"
         homo_command = "grep -r \"HOMO:\" */*/singlet_uhf/eiger.out > dscf_homos.dat"
-        tddft_command = "grep \"Excitation energy:\" */*/*/escf.out > escf_totals.dat"
+        tddft_command = "grep -r \"Excitation energy:\" */*/*/escf.out > escf_totals.dat"
         subprocess.call(totals_command, shell=True)
         subprocess.call(homo_command, shell=True)
         subprocess.call(tddft_command, shell=True)
@@ -624,6 +617,6 @@ if __name__ == "__main__":
                   'set_dist': sys.argv[3]}
         try:
             kwargs['split_dist'] = sys.argv[4]
-        except ValueError:
+        except IndexError:
             print('No set split distance specified...')
-        calcrunner.run(kwargs)
+        calcrunner.run(**kwargs)

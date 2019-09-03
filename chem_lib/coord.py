@@ -33,7 +33,11 @@ no
 %s
 %s
 %s
+%s
 *
+
+
+
 q
 
 
@@ -54,6 +58,7 @@ class CoordControl:
         self.sp3_pseudo_element = 'li'
         self.sp3_2e_pseudo_element = 'li'
         self.sp2_pseudo_element = 'he'
+        self.all_e_basis = 'def-SV(P)'
         self.sp2_pseudo_carbon_basis = 'sless-SV(P)'
         self.sp3_pseudo_carbon_basis = 'def-SV(P)'
         self.sp3_2e_pseudo_carbon_basis = 'def-SV(P)'
@@ -304,8 +309,11 @@ class CoordControl:
         hashed_potential_list = sorted(current_potentials, key=return_hash)
 
         # identify a primary vector
-        distanced_carbon_list = self.order_atoms_by_distance_from(atom_hash, element='c')
-        primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom_hash)
+        #distanced_carbon_list = self.order_atoms_by_distance_from(atom_hash, element='c')
+        distanced_nonpsnonh_list = self.order_atoms_by_distance_from(atom_hash, element='!pseudo!h')
+        #primary_vector = self.vectorise_atom(distanced_carbon_list[1]['#']) - self.vectorise_atom(atom_hash)
+        print('Primary vector is to a %s atom. Hope that\'s right.' % distanced_nonpsnonh_list[1]['el'])
+        primary_vector = self.vectorise_atom(distanced_nonpsnonh_list[1]['#']) - self.vectorise_atom(atom_hash)
 
         # new potentials
         new_potential_coords_list = []
@@ -313,6 +321,7 @@ class CoordControl:
         # Identify normal vector to sp2 plane, take any potential, find its partner, and get vector between them
         distanced_potential_list = self.order_atoms_by_distance_from(current_potentials[0]['#'],
                                                                      list_of_atoms_to_distance=current_potentials)
+
         if supplied_normal_vector is not None:
             normal_vector = supplied_normal_vector
         else:
@@ -321,11 +330,25 @@ class CoordControl:
         primary_potential_vector = self.lengtherise_vector(primary_vector, float(new_set_distance))
         potential_set_split_vector = self.lengtherise_vector(normal_vector, float(new_set_split_distance))
 
+        # Keep track of relative vectors for working out potentials
         relative_potential_vectors = [
             primary_potential_vector + potential_set_split_vector,
             primary_potential_vector - potential_set_split_vector
         ]
 
+        # Final ones to be added (won't include the primary relative vectors if beta potential)
+        final_relative_potential_vectors = []
+
+        # Is it an alpha or beta potential?
+        if len(current_potentials) == 4:
+            pass
+        else:
+            final_relative_potential_vectors = [
+                primary_potential_vector + potential_set_split_vector,
+                primary_potential_vector - potential_set_split_vector
+            ]
+
+        # Build up a list of relative potential vectors of the form [primary+ve, primary-ve, secondary+ve, secondary-ve ...]
         for potential_set in range(self.no_potential_sets_per_atom - 1):
             pps_positive = numpy.dot(self.construct_euler_rodriguez_matrix(
                 normal_vector,
@@ -341,41 +364,18 @@ class CoordControl:
             relative_potential_vectors.append(pps_positive)
             relative_potential_vectors.append(pps_negative)
 
-            # potential coords are still relative to their atom, now make them real.
-            for i, vector in enumerate(relative_potential_vectors):
-                new_potential_coords_list.append(
-                    {'#': current_potentials[i]['#'],
-                     'el': self.sp2_pseudo_element,
-                     'x': vector[0] + atom_to_repotentialise[0],
-                     'y': vector[1] + atom_to_repotentialise[1],
-                     'z': vector[2] + atom_to_repotentialise[2]},
-                )
+            final_relative_potential_vectors.append(pps_positive)
+            final_relative_potential_vectors.append(pps_negative)
 
-        # Now handle beta-type potentials. The guess function supplies 6 s pots then deletes the pair nearest the
-        # bonding neighbour. Do the same. Problem is how to identify bonding neighbour.
-        # Can we work out which neighbour atom doesn't have potentials in its direction?
-        # Yes. Measure angle between s pot and neighbour, then do for all s pots and neighbours and sum the results.
-        # The neighbour with the largest sum of angles is the bonding neighbour, as it has no potentials in its direction.
-
-        # carbon_pseudos = self.identify_pseudocarbon_potentials(atom_hash)
-        # if len(carbon_pseudos) == 4:
-        #
-        #     distanced_nonpsnonh_list = self.order_atoms_by_distance_from(atom_hash, element='!pseudo')
-        #     nonpsnonhs_bonded_to_this_atom = [distanced_atom for distanced_atom in distanced_nonpsnonh_list[1:5] if
-        #                                       self.measure_atom_atom_dist(atom_hash, distanced_atom[
-        #                                           '#']) < self.bond_deciding_distance]
-        #     print("Carbons bonded to atom %s: %s" % (str(atom_hash),
-        #                                              str([nonpsnonh['#'] for nonpsnonh in nonpsnonhs_bonded_to_this_atom])))
-        #     for nonpsnonh_bonded_to_this_atom in nonpsnonhs_bonded_to_this_atom:
-        #         # If this carbon has a neighbour not in the sp2 list, we know this must be a 2e carbon!
-        #         if nonpsnonh_bonded_to_this_atom not in sp2_pseudocarbon_list:
-        #             def distance_from(list_atom):
-        #                 return self.measure_atom_atom_dist(nonpsnonh_bonded_to_this_atom['#'], list_atom['#'])
-        #             carbon_pseudos = self.identify_pseudocarbon_potentials(atom['#'])
-        #             # find pseudos closest to the other atom
-        #             pseudos_distanced_from_sp2_2e = sorted(carbon_pseudos, key=distance_from)
-        #             pseudopotential_hashes_to_delete.append(pseudos_distanced_from_sp2_2e[0]['#'])
-        #             pseudopotential_hashes_to_delete.append(pseudos_distanced_from_sp2_2e[1]['#'])
+        # potential coords are still relative to their atom, now make them real.
+        for i, vector in enumerate(final_relative_potential_vectors):
+            new_potential_coords_list.append(
+                {'#': current_potentials[i]['#'],
+                 'el': self.sp2_pseudo_element,
+                 'x': vector[0] + atom_to_repotentialise[0],
+                 'y': vector[1] + atom_to_repotentialise[1],
+                 'z': vector[2] + atom_to_repotentialise[2]},
+            )
 
         # Now add potentials to coord list, we must overwrite the original potentials using their hashes.
         # This stops the ECP and basis assignments being invalidated.
@@ -463,6 +463,9 @@ class CoordControl:
             for chunk in chunked_indices:
                 string_to_return += """%s\n%s\n%s\nfile\nbasis\n""" % \
                         (ecp_basis_type, ','.join(str(index) for index in chunk), ecp_basis_name)
+        elif atom_specifier == 'all':
+            string_to_return += """%s\n"%s"\n%s\n\n""" % \
+                        (ecp_basis_type, atom_specifier, ecp_basis_name)
         elif type(atom_specifier) is str:
             string_to_return += """%s\n"%s"\n%s\nfile\nbasis\n""" % \
                         (ecp_basis_type, atom_specifier, ecp_basis_name)
@@ -648,6 +651,8 @@ class CoordControl:
         define_cmds_path = os.path.join(os.path.dirname(self.coord_file_path), 'define_add_pseudos')
         with open(os.path.join(define_cmds_path), 'w') as var_file:
             var_file.writelines(define_cmds % (
+                # all atoms
+                self.supply_ecps_bases_to_define('all', 'b', self.all_e_basis),
                 # sp2 potentials
                 self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'b', self.sp2_pseudo_carbon_basis),
                 self.supply_ecps_bases_to_define([carbon['#'] for carbon in sp2_pseudocarbon_list], 'ecp', self.sp2_carbon_ecp),

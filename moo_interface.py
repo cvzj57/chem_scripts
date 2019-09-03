@@ -3,6 +3,7 @@ import sys
 import json
 import argparse
 import multivariate_optimisation
+import chem_lib.coord as coord
 
 empty_setup_file = {
     '_comment': 'Settings/control file for MOO.'
@@ -16,7 +17,7 @@ empty_setup_file = {
                 '6) Good luck.',
     'calc_folder_path': '.',
     'optimise_pseudo_geometry': True,
-    'pseudo_geometry_type': '',
+    'pseudo_geometry_type': 'sp2',
     'optimise_with_orbitals': True,
     "optimise_with_total_gaps": False,
     'seeded_optimisation': False,
@@ -67,13 +68,14 @@ class MOOInterface:
         self.setup_file_name = 'opt.moo'
         self.optdata = empty_setup_file
         self.line_separator = '------------------------'
-        self.potential_reference = '*** [1] Punter, Alexander and Nava, Paola and Carissan, Yannick. Int. J. Quantum Chem. 2019. e25914.'
+        self.references = '''[1] Punter, Alexander and Nava, Paola and Carissan, Yannick. Int. J. Quantum Chem. 2019. e25914.'''
         self.menu_actions = {
-            'moo_file_check1': 'confirm_opt_run',
+            'moo_file_check1': 'confirm_run_opt',
             'moo_file_check2': 'initial_menu',
             'initial_menu': 'initial_menu',
             'initial_menu1': 'potentialisation_menu',
             'initial_menu2': 'optimisation_menu',
+            'initial_menu3': 'initial_menu',
             'initial_menub': 'initial_menu',
             'initial_menuq': 'exit',
             # Optimisation menus
@@ -86,10 +88,12 @@ class MOOInterface:
             'optimisation_menu6': 'confirm_run_opt',
             'optimisation_menub': 'initial_menu',
             ## ECP locators
+            'ecp_locator_menu': 'ecp_locator_menu',
             'ecp_locator_menu1': 'ecp_locator_menu',
             'ecp_locator_menu2': 'optimisation_menu',
             'ecp_locator_menub': 'optimisation_menu',
             ## Orbital Criteria
+            'mo_criterion_menu': 'mo_criterion_menu',
             'mo_criterion_menu1': 'mo_criterion_menu',
             'mo_criterion_menu2': 'optimisation_menu',
             'mo_criterion_menub': 'optimisation_menu',
@@ -99,33 +103,50 @@ class MOOInterface:
             'seed_options_menu2': 'seed_number_menu',
             'seed_options_menub': 'optimisation_menu',
             ## Geomopt options
+            'geomopt_options_menu': 'geomopt_options_menu',
             'geomopt_options_menu1': 'geomopt_options_menu',
-            'geomopt_options_menu2': 'geomopt_options_menu',
+            'geomopt_options_menu2': 'geom_indices_menu',
             'geomopt_options_menu3': 'geomopt_options_menu',
             'geomopt_options_menu4': 'geomopt_options_menu',
+            'geomopt_options_menu5': 'geomopt_options_menu',
+            'geomopt_options_menub': 'optimisation_menu',
             # Potentialisation menus
-            'potentialisation_menu1': 'potentialisation_menu',
-            'potentialisation_menu2': 'potentialisation_menu',
-            'potentialisation_menu3': 'potentialisation_menu',
-            'potentialisation_menu4': 'potentialisation_menu',
+            'potentialisation_menu': 'potentialisation_menu',
+            'potentialisation_menu1': 'incl_guess_menu',
+            'potentialisation_menu2': 'excl_guess_menu',
+            'potentialisation_menu3': 'pot_sp2_menu',
+            'potentialisation_menu4': 'pot_sp3_menu',
+            'potentialisation_menu5': 'repot_sp2_menu',
+            'potentialisation_menu6': 'repot_sp3_menu',
+            'potentialisation_menub': 'initial_menu',
         }
-        print('''
+        self.moo_logo = '''
                     #######################################
                      The Multi-Orbital Optimiser   (___)
                                                   <(o o)>______
                               (or MOO)              ../ ` # # \`;   
                                                       \ ,___, /
                         A Punter, CTOM group           ||   ||  
-                     Université d'Aix-Marseille        ^^   ^^  
+                      Aix-Marseille Université         ^^   ^^  
                     #######################################
-            ''')
+            '''
+        print(self.moo_logo)
+        self.coordcontrol = coord.CoordControl()
+        try:
+            self.coordcontrol.read_coords()
+        except Exception as e:
+            print('I can\'t see a coord file in this directory.')
+            self.exit()
 
     def initial_menu(self):
         print('What would you like to do?')
         print('1: Potentialise a molecule.')
         print('2: Optimise new potentials.')
+        print('3. View references.')
         print("q: Quit")
         choice = input(" >>  ")
+        if choice == '3':
+            self.print_references()
         self.exec_menu(choice, 'initial_menu')
 
     def optimisation_menu(self):
@@ -214,20 +235,30 @@ class MOOInterface:
     def geomopt_options_menu(self):
         print(self.line_separator)
         print('OPTIMISATION: POTENTIAL GEOMETRY')
-        print('If using non-atom centered potentials in the style of [1], MOO can optimise their geometry.')
+        print('If using non-atom centered potentials in the style of reference [1], MOO can optimise their geometry.')
         print('1. Turn on/off geometry optimisation. (currently %s)'
               % self.trueon(self.optdata['optimise_pseudo_geometry']))
         print('2. Add pseudocarbon indices.')
-        print('3. Set potential set distance boundaries (α,β,γ,δ potentials). Currently: %s'
-              % self.optdata['pseudo_geometry']['potential_set_distance_bounds'])
-        print('4. Set potential set split distance boundaries (α,β potentials). Currently: %s'
-              % self.optdata['pseudo_geometry']['potential_set_split_distance_bounds'])
-        print('5. Set pseudogeometry type (currently: %s).' % self.optdata['pseudo_geometry_type'])
-        print(self.potential_reference)
+        print('3. Toggle pseudogeometry type (currently: %s).' % self.optdata['pseudo_geometry_type'])
+        print('b: Go back')
+        #print('3. Set potential set distance boundaries (α,β,γ,δ potentials). Currently: %s'
+        #      % self.optdata['pseudo_geometry']['potential_set_distance_bounds'])
+        #print('4. Set potential set split distance boundaries (α,β potentials). Currently: %s'
+        #      % self.optdata['pseudo_geometry']['potential_set_split_distance_bounds'])
         choice = input(" >>  ")
         if choice == '1':
             self.toggle_geomopt()
+        elif choice == '3':
+            self.toggle_geomtype()
         self.exec_menu(choice, 'geomopt_options_menu')
+
+    def geom_indices_menu(self):
+        print(self.line_separator)
+        print('OPTIMISATION: PSEUDOCARBON INDICES')
+        print('Enter indices of pseudocarbons for potential geometry optimisation in Turbomole format (e.g. 1-10,12,16)')
+        choice = input(" >>  ")
+        self.set_geom_indices(choice)
+        self.gotomenu('geomopt_options_menu')
 
     def moo_file_check(self):
         opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
@@ -251,6 +282,13 @@ class MOOInterface:
 
     def toggle_geomopt(self):
         self.optdata['optimise_pseudo_geometry'] = not self.optdata['optimise_pseudo_geometry']
+
+    def toggle_geomtype(self):
+        print(self.optdata['pseudo_geometry_type'])
+        if self.optdata['pseudo_geometry_type'] == 'sp2':
+            self.optdata['pseudo_geometry_type'] = 'sp3'
+        elif self.optdata['pseudo_geometry_type'] == 'sp3':
+            self.optdata['pseudo_geometry_type'] = 'sp2'
 
     def add_ecp_locator(self, ecp_name, ecp_l):
         self.optdata['ecp_locators'].append(
@@ -280,40 +318,98 @@ class MOOInterface:
     def set_seed_number(self, initial_seed_number):
         self.optdata['initial_seed_number'] = int(initial_seed_number)
 
+    def set_geom_indices(self, indices_string):
+        self.optdata['pseudo_geometry']['indices_of_pseudo_carbons'] = self.parse_coord_list(indices_string)
+
     def potentialisation_menu(self):
         print(self.line_separator)
         print('POTENTIAL PLACEMENT MENU')
-        print('Use this menu to place potentials in the manner of [1].')
+        print('Use this menu to place potentials in the manner of reference [1].')
         print('Beware! I cannot undo mistakes! Save your geometries before attempting this!')
         print('1. Guess for indices (guesses potentialisation including specified carbon atoms).')
         print('2. Guess for indices except (guesses potentialisation excluding specified carbon atoms).')
-        print('2. Place sp2 non-atom-centered potentials.')
-        print('3. Place sp3 non-atom-centered potentials.')
-        print(self.potential_reference)
+        print('3. Place sp2 non-atom-centered potentials.')
+        print('4. Place sp3 non-atom-centered potentials.')
+        print('5. Reposition sp2 non-atom-centered potentials.')
+        print('6. Reposition sp3 non-atom-centered potentials.')
+        print('b: Go back')
         choice = input(" >>  ")
         self.exec_menu(choice, menu='potentialisation_menu')
 
     def incl_guess_menu(self):
+        self.reset_coords()
         print(self.line_separator)
         print('POTENTIAL PLACEMENT: INCLUSIVE MOO GUESS')
         print('Specify indices of carbons to guess in Turbomole format (e.g. 1-10,12,16)')
         include = input(' >> ')
-        # call guess incl
+        self.coordcontrol.guess_potentialisation([include, 'incl'])
         print('Guess complete. You will need to specify electron occupation manually in the control file.')
+        self.gotomenu('initial_menu')
 
     def excl_guess_menu(self):
+        self.reset_coords()
         print(self.line_separator)
         print('POTENTIAL PLACEMENT: EXCLUSIVE MOO GUESS')
         print('Specify indices of carbons to ignore in Turbomole format (e.g. 1-10,12,16). I\'ll guess the rest.')
         exclude = input(' >> ')
-        # call guess excl
+        self.coordcontrol.guess_potentialisation([exclude, 'excl'])
         print('Guess complete. You will need to specify electron occupation manually in the control file.')
+        self.gotomenu('initial_menu')
 
     def pot_sp2_menu(self):
-        pass
+        self.reset_coords()
+        print(self.line_separator)
+        print('POTENTIAL PLACEMENT: POTENTIALISE SP2 CARBONS')
+        print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16). Leave blank for all.')
+        indices_string = input(" >>  ")
+        indices = self.parse_coord_list(indices_string)
+        self.coordcontrol.pseudopotentialise_molecule(indices)
+        print('Atoms pseudopotentialised.')
+        self.gotomenu('potentialisation_menu')
 
     def pot_sp3_menu(self):
-        pass
+        self.reset_coords()
+        print(self.line_separator)
+        print('POTENTIAL PLACEMENT: POTENTIALISE SP3 CARBONS')
+        print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16).')
+        indices_string = input(" >>  ")
+        indices = self.parse_coord_list(indices_string)
+        print('Specify indices of hydrogens to delete in Turbomole format (e.g. 1-10,12,16).')
+        del_indices_string = input(" >>  ")
+        del_indices = self.parse_coord_list(del_indices_string)
+        self.coordcontrol.pseudopotentialise_ethane_like_molecule([indices, 'del', del_indices])
+        print('Atoms pseudopotentialised.')
+        self.gotomenu('potentialisation_menu')
+
+    def repot_sp2_menu(self):
+        self.reset_coords()
+        print(self.line_separator)
+        print('POTENTIAL PLACEMENT: REPOTENTIALISE SP2 CARBONS')
+        print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16)')
+        indices_string = input(" >>  ")
+        indices = self.parse_coord_list(indices_string)
+        print('Specify set distance in atomic units a.u.')
+        set_dist = input(' >> ')
+        print('Specify split distance in atomic units a.u.')
+        split_dist = input(' >> ')
+        for index in indices:
+            self.coordcontrol.repseudopotentialise_sp2_atom(index, set_dist, split_dist)
+        print('New pseudo distances set.')
+        self.gotomenu('potentialisation_menu')
+
+    def repot_sp3_menu(self):
+        self.reset_coords()
+        print(self.line_separator)
+        print('POTENTIAL PLACEMENT: REPOTENTIALISE SP3 CARBONS')
+        print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16)')
+        indices_string = input(" >>  ")
+        indices = self.parse_coord_list(indices_string)
+        print('Specify set distance in atomic units a.u.')
+        set_dist = input(' >> ')
+        for index in indices:
+            self.coordcontrol.set_potential_distance_to(index, set_dist)
+        print('New pseudo distances set.')
+        self.gotomenu('potentialisation_menu')
 
     def trueon(self, boolean):
         if boolean is True:
@@ -323,18 +419,30 @@ class MOOInterface:
         return message
 
     def exec_menu(self, choice, menu=''):
-        ch = choice.lower()
-        if ch == '':
-            getattr(self, self.menu_actions[menu])()
-        else:
-            action_id = menu + choice
-            print(action_id)
+        action_id = menu + choice
+        print(action_id)
+        try:
+            getattr(self, self.menu_actions[action_id])()
+        except KeyError:
+            print("Invalid selection.\n")
             try:
-                getattr(self, self.menu_actions[action_id])()
-            except KeyError:
-                print("Invalid selection, please try again.\n")
+                self.gotomenu(menu)
+            except Exception as e:
+                print(e)
                 getattr(self, self.menu_actions['initial_menu'])()
         return
+
+    def parse_coord_list(self, raw_input):
+        print("Raw input received: %s" % raw_input)
+        splitted = raw_input.split(',')
+        final_coord_list = []
+        for split_input in splitted:
+            if '-' in split_input:
+                input_range = split_input.split('-')
+                final_coord_list.extend([*range(int(input_range[0]), int(input_range[1])+1)])
+            else:
+                final_coord_list.append(int(split_input))
+        return final_coord_list
 
     def gotomenu(self, menu):
         getattr(self, self.menu_actions[menu])()
@@ -350,8 +458,14 @@ class MOOInterface:
               % [option['gap_folder_path'] for option in self.optdata['tracked_total_gaps']])
         print('Seeded Optimisation: ', self.trueon(self.optdata['seeded_optimisation']), '(seeds: %s)'
               % self.optdata['initial_seed_number'])
-        print('Geometry Optimisation: ', self.trueon(self.optdata['optimise_pseudo_geometry']), '(%s carbons: %s)'
+        print('Geometry Optimisation: ', self.trueon(self.optdata['optimise_pseudo_geometry']), '(carbons of type %s, indices: %s)'
               % (self.optdata['pseudo_geometry_type'], self.optdata['pseudo_geometry']['indices_of_pseudo_carbons']))
+        print(self.line_separator)
+
+    def print_references(self):
+        print(self.line_separator)
+        print('REFERENCES:')
+        print(self.references)
         print(self.line_separator)
 
     # Back to main menu
@@ -367,6 +481,9 @@ class MOOInterface:
             json.dump(self.optdata, outfile, sort_keys=True, indent=2)
         outfile.close()
 
+    def reset_coords(self):
+        self.coordcontrol.coord_list = []
+        self.coordcontrol.read_coords()
 
 if __name__ == "__main__":
     interface = MOOInterface()
