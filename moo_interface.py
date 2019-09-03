@@ -69,6 +69,17 @@ class MOOInterface:
         self.optdata = empty_setup_file
         self.line_separator = '------------------------'
         self.references = '''[1] Punter, Alexander and Nava, Paola and Carissan, Yannick. Int. J. Quantum Chem. 2019. e25914.'''
+        self.moo_logo = '''
+                    #######################################
+                     The Multi-Orbital Optimiser   (___)
+                                                  <(o o)>______
+                              (or MOO)              ../ ` # # \`;   
+                                                      \ ,___, /
+                        A Punter, CTOM group           ||   ||  
+                      Aix-Marseille Université         ^^   ^^  
+                    #######################################
+            '''
+        print(self.moo_logo)
         self.menu_actions = {
             'moo_file_check1': 'confirm_run_opt',
             'moo_file_check2': 'initial_menu',
@@ -112,26 +123,19 @@ class MOOInterface:
             'geomopt_options_menub': 'optimisation_menu',
             # Potentialisation menus
             'potentialisation_menu': 'potentialisation_menu',
-            'potentialisation_menu1': 'incl_guess_menu',
-            'potentialisation_menu2': 'excl_guess_menu',
-            'potentialisation_menu3': 'pot_sp2_menu',
-            'potentialisation_menu4': 'pot_sp3_menu',
-            'potentialisation_menu5': 'repot_sp2_menu',
-            'potentialisation_menu6': 'repot_sp3_menu',
+            'potentialisation_menu1': 'potentialisation_menu',
+            'potentialisation_menu2': 'incl_guess_menu',
+            'potentialisation_menu3': 'excl_guess_menu',
+            'potentialisation_menu4': 'pot_sp2_menu',
+            'potentialisation_menu5': 'pot_sp3_menu',
+            'potentialisation_menu6': 'repot_sp2_menu',
+            'potentialisation_menu7': 'repot_sp3_menu',
             'potentialisation_menub': 'initial_menu',
         }
-        self.moo_logo = '''
-                    #######################################
-                     The Multi-Orbital Optimiser   (___)
-                                                  <(o o)>______
-                              (or MOO)              ../ ` # # \`;   
-                                                      \ ,___, /
-                        A Punter, CTOM group           ||   ||  
-                      Aix-Marseille Université         ^^   ^^  
-                    #######################################
-            '''
-        print(self.moo_logo)
         self.coordcontrol = coord.CoordControl()
+        self.post_guess_message = '''
+        Guess complete. You will need to specify electron occupation manually 
+        in the control file. Check the pseudification.log to see which atoms I replaced.'''
         try:
             self.coordcontrol.read_coords()
         except Exception as e:
@@ -326,15 +330,22 @@ class MOOInterface:
         print('POTENTIAL PLACEMENT MENU')
         print('Use this menu to place potentials in the manner of reference [1].')
         print('Beware! I cannot undo mistakes! Save your geometries before attempting this!')
-        print('1. Guess for indices (guesses potentialisation including specified carbon atoms).')
-        print('2. Guess for indices except (guesses potentialisation excluding specified carbon atoms).')
-        print('3. Place sp2 non-atom-centered potentials.')
-        print('4. Place sp3 non-atom-centered potentials.')
-        print('5. Reposition sp2 non-atom-centered potentials.')
-        print('6. Reposition sp3 non-atom-centered potentials.')
+        print('1. Guess potentialisation of whole molecule.')
+        print('2. Guess for indices (guesses potentialisation including specified carbon atoms).')
+        print('3. Guess for indices except (guesses potentialisation excluding specified carbon atoms).')
+        print('4. Place sp2 non-atom-centered potentials.')
+        print('5. Place sp3 non-atom-centered potentials.')
+        print('6. Reposition sp2 non-atom-centered potentials.')
+        print('7. Reposition sp3 non-atom-centered potentials.')
         print('b: Go back')
         choice = input(" >>  ")
-        self.exec_menu(choice, menu='potentialisation_menu')
+        if choice == '1':
+            self.reset_coords()
+            self.coordcontrol.guess_potentialisation('')
+            print(self.post_guess_message)
+            self.gotomenu('initial_menu')
+        else:
+            self.exec_menu(choice, menu='potentialisation_menu')
 
     def incl_guess_menu(self):
         self.reset_coords()
@@ -342,8 +353,8 @@ class MOOInterface:
         print('POTENTIAL PLACEMENT: INCLUSIVE MOO GUESS')
         print('Specify indices of carbons to guess in Turbomole format (e.g. 1-10,12,16)')
         include = input(' >> ')
-        self.coordcontrol.guess_potentialisation([include, 'incl'])
-        print('Guess complete. You will need to specify electron occupation manually in the control file.')
+        self.coordcontrol.guess_potentialisation(['guess', 'incl', include])
+        print(self.post_guess_message)
         self.gotomenu('initial_menu')
 
     def excl_guess_menu(self):
@@ -352,8 +363,8 @@ class MOOInterface:
         print('POTENTIAL PLACEMENT: EXCLUSIVE MOO GUESS')
         print('Specify indices of carbons to ignore in Turbomole format (e.g. 1-10,12,16). I\'ll guess the rest.')
         exclude = input(' >> ')
-        self.coordcontrol.guess_potentialisation([exclude, 'excl'])
-        print('Guess complete. You will need to specify electron occupation manually in the control file.')
+        self.coordcontrol.guess_potentialisation(['guess', 'excl', exclude])
+        print(self.post_guess_message)
         self.gotomenu('initial_menu')
 
     def pot_sp2_menu(self):
