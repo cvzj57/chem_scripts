@@ -688,8 +688,8 @@ class CoordControl:
             replacement_list = self.parse_coord_list(sysargs[2])
             atoms_to_potentialise = list(item for item in self.coord_list if item["#"] in replacement_list)
         else:
-            atoms_to_potentialise = (item for item in self.coord_list if item["el"] == 'c')
-            deletion_list = (item for item in self.coord_list if item["el"] == 'h')
+            atoms_to_potentialise = list(item for item in self.coord_list if item["el"] == 'c')
+            deletion_list = list(item['#'] for item in self.coord_list if item["el"] == 'h')
         print('Pseudo-potentialising carbon atoms %s ...' % [atom['#'] for atom in atoms_to_potentialise])
 
         potential_coords_list = []
@@ -776,10 +776,10 @@ class CoordControl:
         deletion_list = []
         potential_coords_list = []
         if len(sysargs) > 2:
+            replacement_list = deletion_list = self.parse_coord_list(sysargs[2])
+            atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
             if 'del' in sysargs:
                 deletion_list = self.parse_coord_list(sysargs[4])
-            replacement_list = self.parse_coord_list(sysargs[2])
-            atoms_to_replace = list(item for item in self.coord_list if item["#"] in replacement_list)
         else:
             atoms_to_replace = (item for item in self.coord_list if item["el"] == 'c')
             deletion_list = (item for item in self.coord_list if item["el"] == 'h')
@@ -802,7 +802,7 @@ class CoordControl:
 
             # Lengtherise vector from carbon to give relative pp coordinates.
             vector_c_to_new_pp = self.lengtherise_vector(vector_from_nearest_carbon, self.sp3_1e_atom_potential_distance)
-            vector_c_to_new_dipole_pp = self.lengtherise_vector(vector_to_nearest_carbon, self.sp3_1e_atom_potential_distance)
+            #vector_c_to_new_dipole_pp = self.lengtherise_vector(vector_to_nearest_carbon, self.sp3_1e_atom_potential_distance)
 
             # Add to carbon coords to get new pp coords.
             potential_coords_list.append(

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -29,34 +30,13 @@ empty_setup_file = {
         'potential_set_split_distance_bounds': (0.25, 1.0)
     },
     'ecp_locators': [
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'c ecp-p',
-         'orbital_descriptor': 'p-f',
-         },
-        {'line_type': '$ecp',
-         'basis_ecp_name': 'he ecp-s',
-         'orbital_descriptor': 's-f',
-         }
     ],
-    'tracked_orbitals': [{
-        'irrep': '1a',
-        'spin': 'mos',
-        'reference_energy': 0.0,
-        'orbital_error_multiplier': 1.0
-    },
+    'tracked_orbitals': [
     ],
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
     'initial_guesses': [0.1, 0.1, 0.1, 0.1],
     'initial_seed_number': 1,
     "tracked_total_gaps": [
-        {
-            "reference_gap_energy": 3.53295493,
-            "gap_folder_path": "triplet"
-        },
-        {
-            "reference_gap_energy": 9.09111851,
-            "gap_folder_path": "cation"
-        }
     ]
 }
 
@@ -67,7 +47,7 @@ class MOOInterface:
         # generic setup stuff
         self.setup_file_name = 'opt.moo'
         self.optdata = empty_setup_file
-        self.line_separator = '------------------------'
+        self.line_separator = '--------------------------------------------'
         self.references = '''[1] Punter, Alexander and Nava, Paola and Carissan, Yannick. Int. J. Quantum Chem. 2019. e25914.'''
         self.moo_logo = '''
                     #######################################
@@ -92,11 +72,14 @@ class MOOInterface:
             # Optimisation menus
             'optimisation_menu': 'optimisation_menu',
             'optimisation_menu1': 'ecp_locator_menu',
-            'optimisation_menu2': 'mo_criterion_menu',
-            'optimisation_menu3': 'optimisation_menu',
-            'optimisation_menu4': 'seed_options_menu',
-            'optimisation_menu5': 'geomopt_options_menu',
-            'optimisation_menu6': 'confirm_run_opt',
+            'optimisation_menu2': 'optimisation_menu',
+            'optimisation_menu3': 'mo_criterion_menu',
+            'optimisation_menu4': 'optimisation_menu',
+            'optimisation_menu5': 'total_gap_criterion_menu',
+            'optimisation_menu6': 'seed_options_menu',
+            'optimisation_menu7': 'geomopt_options_menu',
+            'optimisation_menu8': 'initial_guess_menu',
+            'optimisation_menu9': 'confirm_run_opt',
             'optimisation_menub': 'initial_menu',
             ## ECP locators
             'ecp_locator_menu': 'ecp_locator_menu',
@@ -158,20 +141,34 @@ class MOOInterface:
         print(self.line_separator)
         print('OPTIMISATION MENU')
         self.showoptsettings()
-        print('1: Add ECP functions')
-        print('2: Add MO criterion')
-        print('3: Add total energy difference criterion')
-        print('4: Semi-random seed options')
-        print('5: Potential geometry optimisation options')
-        print('6: Run optimisation now')
+        print('1. Add ECP functions')
+        print('2. Toggle MO energy optimisation (currently %s)'
+              % self.trueon(self.optdata['optimise_with_orbitals']))
+        print('3. Molecular Orbital energy criteria')
+        print('4. Toggle total energy difference optimisation (currently %s)'
+              % self.trueon(self.optdata['optimise_with_total_gaps']))
+        print('5. Total energy difference criteria')
+        print('6. Semi-random seed options')
+        print('7. Potential geometry optimisation options')
+        print('8. Set initial guesses for ECP parameters (only needed if not using semi-random seeds).')
+        print('9. Run optimisation now')
         print('b: Go back')
         choice = input(" >>  ")
+        if choice == '2':
+            self.toggle_mo_crit()
+        elif choice == '4':
+            self.toggle_totalgap_crit()
         self.exec_menu(choice, 'optimisation_menu')
 
     def confirm_run_opt(self):
-        if input('Run optimisation (y/n)?') == 'y':
-            optimiser = multivariate_optimisation.Optimiser()
-            optimiser.run()
+        print('Run optimisation (y/n)?')
+        choice = input(' >> ')
+        if choice == 'y':
+            try:
+                optimiser = multivariate_optimisation.Optimiser()
+                optimiser.run()
+            except Exception as e:
+                print('Error: %s' % e)
         else:
             self.gotomenu('initial_menu')
 
@@ -195,7 +192,7 @@ class MOOInterface:
         print('MO name (e.g. "1a\""):')
         irrep = input(' >>  ')
         print('reference energy (eV):')
-        ref_E = input(' >>  ')
+        ref_E = float(input(' >>  '))
         print('spin: (alpha, beta, closed)')
         spin = input(' >>  ')
         self.add_mo_criterion(irrep, ref_E, spin)
@@ -210,7 +207,7 @@ class MOOInterface:
         print('Comparison calc folder name (e.g. "1st_ie"):')
         other_calc_folder = input(' >>  ')
         print('reference total E gap (eV):')
-        ref_E = input(' >>  ')
+        ref_E = float(input(' >>  '))
         self.add_total_gap_criterion(other_calc_folder, ref_E)
         print('1. Add another ECP function.')
         print('2. Done adding ECP functions.')
@@ -264,6 +261,24 @@ class MOOInterface:
         self.set_geom_indices(choice)
         self.gotomenu('geomopt_options_menu')
 
+    def initial_guess_menu(self):
+        print(self.line_separator)
+        print('OPTIMISATION: INITIAL GUESSES')
+        print('If not using semi-random seeds, please supply an initial coefficient and exponent for each ECP function.')
+        initial_guesses = []
+        for ecp_locator in self.optdata['ecp_locators']:
+            print('Initial coefficient for %s, %s:'
+                  % (ecp_locator['basis_ecp_name'], ecp_locator['orbital_descriptor']))
+            coefficient = input()
+            initial_guesses.append(float(coefficient))
+            print('Initial exponent for %s, %s:'
+                  % (ecp_locator['basis_ecp_name'], ecp_locator['orbital_descriptor']))
+            exponent = input()
+            initial_guesses.append(float(exponent))
+        self.optdata['initial_guesses'] = initial_guesses
+        self.gotomenu('optimisation_menu')
+
+
     def moo_file_check(self):
         opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
         if not os.path.isfile(opt_data_path):
@@ -280,6 +295,12 @@ class MOOInterface:
             print('2: Enter MOO setup.')
             choice = input(" >>  ")
             self.exec_menu(choice, menu='moo_file_check')
+
+    def toggle_mo_crit(self):
+        self.optdata['optimise_with_orbitals'] = not self.optdata['optimise_with_orbitals']
+
+    def toggle_totalgap_crit(self):
+        self.optdata['optimise_with_total_gaps'] = not self.optdata['optimise_with_total_gaps']
 
     def toggle_seeded(self):
         self.optdata['seeded_optimisation'] = not self.optdata['seeded_optimisation']
@@ -310,7 +331,8 @@ class MOOInterface:
         self.optdata['tracked_orbitals'].append(
             {'irrep': irrep,
              'spin': spin,
-             'reference_energy': ref_E})
+             'reference_energy': ref_E,
+             'orbital_error_multiplier': 1.0})
         return
 
     def add_total_gap_criterion(self, other_calc_folder, ref_E):
@@ -373,8 +395,8 @@ class MOOInterface:
         print('POTENTIAL PLACEMENT: POTENTIALISE SP2 CARBONS')
         print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16). Leave blank for all.')
         indices_string = input(" >>  ")
-        indices = self.parse_coord_list(indices_string)
-        self.coordcontrol.pseudopotentialise_molecule(indices)
+        # indices = self.parse_coord_list(indices_string)
+        self.coordcontrol.pseudopotentialise_molecule('sp2', indices_string)
         print('Atoms pseudopotentialised.')
         self.gotomenu('potentialisation_menu')
 
@@ -382,13 +404,9 @@ class MOOInterface:
         self.reset_coords()
         print(self.line_separator)
         print('POTENTIAL PLACEMENT: POTENTIALISE SP3 CARBONS')
-        print('Specify pseudocarbon indices in Turbomole format (e.g. 1-10,12,16).')
+        print('Specify sp3 atoms (e.g. hydrogen for methyl) indices in Turbomole format (e.g. 1-10,12,16).')
         indices_string = input(" >>  ")
-        indices = self.parse_coord_list(indices_string)
-        print('Specify indices of hydrogens to delete in Turbomole format (e.g. 1-10,12,16).')
-        del_indices_string = input(" >>  ")
-        del_indices = self.parse_coord_list(del_indices_string)
-        self.coordcontrol.pseudopotentialise_ethane_like_molecule([indices, 'del', del_indices])
+        self.coordcontrol.pseudopotentialise_ethane_like_molecule(['', 'sp3', indices_string])
         print('Atoms pseudopotentialised.')
         self.gotomenu('potentialisation_menu')
 
@@ -431,7 +449,6 @@ class MOOInterface:
 
     def exec_menu(self, choice, menu=''):
         action_id = menu + choice
-        print(action_id)
         try:
             getattr(self, self.menu_actions[action_id])()
         except KeyError:
@@ -471,6 +488,7 @@ class MOOInterface:
               % self.optdata['initial_seed_number'])
         print('Geometry Optimisation: ', self.trueon(self.optdata['optimise_pseudo_geometry']), '(carbons of type %s, indices: %s)'
               % (self.optdata['pseudo_geometry_type'], self.optdata['pseudo_geometry']['indices_of_pseudo_carbons']))
+        print('Initial guesses: ', self.optdata['initial_guesses'])
         print(self.line_separator)
 
     def print_references(self):

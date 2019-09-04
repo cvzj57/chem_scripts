@@ -118,6 +118,7 @@ class Optimiser:
         self.iterations = 0
         self.current_seed = 0
         self.moo_data_directory = 'moo_data'
+        self.line_separator = '==================================================\n'
         # optimisation specs
         self.ecp_locators = []
 
@@ -218,9 +219,9 @@ class Optimiser:
                 except Exception as e:
                     error_file.write('%s' % e)
             error_file.close()
-        #else:
+        else:
         #    if input('Run now? y/n: ') == 'y':
-        #        self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
+            self.run_multivariate_orbital_optimisation(numpy.array(self.initial_guesses))
 
     def setup_menu(self):
         setup_file = empty_setup_file
@@ -764,15 +765,18 @@ class Optimiser:
                     logging.info(min_test)
 
                     sorted_results = sorted(results_dicts_all_seeds, key=lambda k: k['fun'])
-                    logging.info('Ran optimisation with %s initial seed(s), best result: \n %s' %
-                                 (self.current_seed, sorted_results[0]))
+                    logging.info(self.line_separator)
+                    logging.info('Ran optimisation with %s initial seed(s), best result: \n %s \n %s' %
+                                 (self.current_seed, sorted_results[0],
+                                  'Check seed_results.moo to see each seed result.'))
 
                     with open('seed_results.moo', 'w') as seed_result_file:
                         try:
                             seed_result_file.write('%s MOO seed results, smallest to largest total error:\n'
                                                    % self.current_seed)
-
-                            seed_result_file.write('%s \n\n ' % [sorted_result for sorted_result in sorted_results])
+                            for sorted_result in sorted_results:
+                                seed_result_file.write(self.line_separator)
+                                seed_result_file.write('%s \n\n ' % sorted_result)
                         except Exception as e:
                             seed_result_file.write('%s' % e)
                             seed_result_file.close()
