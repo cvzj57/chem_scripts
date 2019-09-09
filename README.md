@@ -16,7 +16,7 @@ This contains various scripts to make pseudo-potential generation and use easier
  
 MOO now has a text user interface, that can be started by running moo.py (Python 3). The MOO interface allows you to 
 
-- place potentials in Turbomole `coord` files.
+- place potentials in Turbomole `coord` files (and can guess potential setups by itself).
 - optimise new potentials using MOO's own scripts.
 
 The MOO interface helps the user set up the `opt.moo` settings file for optimisation. The `opt.moo` file can still be modified by hand.
