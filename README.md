@@ -5,12 +5,12 @@ This contains various scripts to make pseudo-potential generation and use easier
 # The MOO Interface
 ```
 #######################################
- The Multi-Orbital Optimiser  (___)
-                             <(o o)>______
-         (or MOO)              ../ ` # # \`;   
-                                 \ ,___, /
-                                  ||   ||  
-                                  ^^   ^^  
+ The Multi-Orbital Optimiser   (___)
+                              <(o o)>______
+          (or MOO)              ../ ` # # \`;   
+                                  \ ,___, /
+    A Punter, CTOM group           ||   ||  
+  Aix-Marseille Université         ^^   ^^  
 #######################################
  ```
  
