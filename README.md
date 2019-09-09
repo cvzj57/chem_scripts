@@ -2,6 +2,27 @@
 
 This contains various scripts to make pseudo-potential generation and use easier. It works with Turbomole.
 
+# The MOO Interface
+```
+#######################################
+ The Multi-Orbital Optimiser  (___)
+                             <(o o)>______
+         (or MOO)              ../ ` # # \`;   
+                                 \ ,___, /
+                                  ||   ||  
+                                  ^^   ^^  
+#######################################
+ ```
+ 
+MOO now has a text user interface, that can be started by running moo.py (Python 3). The MOO interface allows you to 
+
+- place potentials in Turbomole `coord` files.
+- optimise new potentials using MOO's own scripts.
+
+The MOO interface helps the user set up the `opt.moo` settings file for optimisation. The `opt.moo` file can still be modified by hand.
+
+One can still use the scripts via the command line as follows:
+
 ## Placing pseudo-potentials
 
 Use the coord.py script to place pseudo-potentials on a standard geometry. Keywords are:
@@ -19,20 +40,4 @@ The guess function also takes the arguments `incl` and `excl`. Using `incl` foll
  - `sp3 in1,int2,int3...` This places 3 dummy atoms around the specified atoms in the sp3 (methyl-group) pattern. The integers represent the atom index (starting from 1). Example: `coord.py sp3 2-4,5`.
  
  - `del int1,int2,int3...` This removes the specified atoms and is chained with the sp2 or sp3 options. Use it to remove the all-electron Hydrogen atoms. For example, `coord.py sp3 1 del 2-4` will add dummy atoms in the methyl pattern around atom 1, and removes the atoms 2, 3 and 4. This is useful because the atom indices often change during pseudo-potentialisation.  
- 
- ## Optimising potentials
- 
- ```
-#######################################
-The Multi-Orbital Optimiser  (___)
-                             <(o o)>______
-         (or MOO)              ../ ` # # \`;   
-                                 \ ,___, /
-                                  ||   ||  
-                                  ^^   ^^  
-#######################################
- ```
- 
- This is done with the MOO script. Run `multivariate_optimisation.py` to have MOO guide you through the setup. This is a work in progress, a better menu system is on the way...
- 
- The `opt.moo` settings file governs the optimisation parameters.
+
