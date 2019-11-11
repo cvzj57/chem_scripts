@@ -16,7 +16,7 @@ empty_setup_file = {
                 '5) run the multivariate_optimisation.py script '
                 '6) Good luck.',
     'calc_folder_path': '.',
-    'optimise_pseudo_geometry': True,
+    'optimise_pseudo_geometry': False,
     'pseudo_geometry_type': 'sp2',
     'optimise_with_orbitals': True,
     "optimise_with_total_gaps": False,
@@ -33,7 +33,7 @@ empty_setup_file = {
     'tracked_orbitals': [
     ],
     # Array of initial guesses (MUST be same order as ecp_locators e.g. p_coeff, p_exp, s_coeff, s_exp)
-    'initial_guesses': [0.1, 0.1, 0.1, 0.1],
+    'initial_guesses': [],
     'initial_seed_number': 1,
     "tracked_total_gaps": [
     ]
@@ -79,6 +79,7 @@ class MOOInterface:
             'optimisation_menu7': 'geomopt_options_menu',
             'optimisation_menu8': 'initial_guess_menu',
             'optimisation_menu9': 'confirm_run_opt',
+            'optimisation_menuh': 'optimisation_menu',
             'optimisation_menub': 'initial_menu',
             ## ECP locators
             'ecp_locator_menu': 'ecp_locator_menu',
@@ -118,6 +119,34 @@ class MOOInterface:
         self.post_guess_message = '''
         Guess complete. You will need to specify electron occupation manually 
         in the control file. Check the pseudification.log to see which atoms I replaced.'''
+        self.optimisation_guide = '''
+        OPTIMISATION GUIDE
+        
+        In order to optimise potentials with MOO, you will need control and coord files already set up with 
+        pseudopotentials. 
+        
+        After this, you'll need to supply the ecp name and angular momentum of the potential to MOO using 
+        the 'Add ECP functions' option.
+        
+        Next, you will need either to supply a starting coefficient and exponent for each ECP using the 'Set initial 
+        guesses...' option, or use the semi-random seed options. When supplying initial guesses, bear in mind that 
+        smaller numbers tend to work better, and that exponents cannot be negative.
+        
+        Using the semi-random seed option means that MOO will run the optimisation a specified number of times using 
+        semi-random guesses for the starting potential criteria. Several hundred seeds may be needed to be sure of 
+        finding the best result within the boundary conditions, so this is much slower than a good starting guess.
+        
+        Now you should be ready to add optimisation criteria. MOO currently has two types of criteria to use. These are:
+        (1) Molecular Orbital energies, which are supplied with the 'Molecular Orbital energy criteria').
+        (2) Total energy differences, in which MOO will try to fit the difference between two different pseudopotential 
+        calculations, both of which will need to be prepared in advance. Use the 'Total energy difference criteria'
+        options to add these.
+        
+        Finally, the 'Potential geometry optimisation options' are to be used only with pseudofragments as described in
+        Reference [1]. With this option the positions of non-atom-centered pseudopotentials will be adjusted by MOO
+        during the optimisation. You will need to specify the indices of pseudocarbon atoms and the type of 
+        hybridisation.
+        '''
         try:
             self.coordcontrol.read_coords()
         except Exception as e:
@@ -151,13 +180,20 @@ class MOOInterface:
         print('7. Potential geometry optimisation options')
         print('8. Set initial guesses for ECP parameters (only needed if not using semi-random seeds).')
         print('9. Run optimisation now')
+        print('h. Help. Show optimisation guide.')
         print('b: Go back')
         choice = input(" >>  ")
         if choice == '2':
             self.toggle_mo_crit()
         elif choice == '4':
             self.toggle_totalgap_crit()
+        elif choice == 'h':
+            self.print_optimisation_guide()
         self.exec_menu(choice, 'optimisation_menu')
+
+    def print_optimisation_guide(self):
+        print(self.line_separator)
+        print(self.optimisation_guide)
 
     def confirm_run_opt(self):
         print('Run optimisation (y/n)?')
@@ -277,7 +313,6 @@ class MOOInterface:
         self.optdata['initial_guesses'] = initial_guesses
         self.gotomenu('optimisation_menu')
 
-
     def moo_file_check(self):
         opt_data_path = os.path.join(os.getcwd(), self.setup_file_name)
         if not os.path.isfile(opt_data_path):
@@ -350,7 +385,7 @@ class MOOInterface:
         print(self.line_separator)
         print('POTENTIAL PLACEMENT MENU')
         print('Use this menu to place potentials in the manner of reference [1].')
-        print('Beware! I cannot undo mistakes! Save your geometries before attempting this!')
+        print('WARNING: Beware! I cannot undo mistakes! Save your geometries before attempting this!')
         print('1. Guess potentialisation of whole molecule.')
         print('2. Guess for indices (guesses potentialisation including specified carbon atoms).')
         print('3. Guess for indices except (guesses potentialisation excluding specified carbon atoms).')
@@ -477,17 +512,20 @@ class MOOInterface:
     def showoptsettings(self):
         print(self.line_separator)
         print('CURRENT SETTINGS:')
-        print('ECPs to optimise: ', [('%s' % option['basis_ecp_name'] + ' (%s)'
+        print('ECPs to optimise:       ', [('%s' % option['basis_ecp_name'] + ' (%s)'
                                       % option['orbital_descriptor']) for option in self.optdata['ecp_locators']])
-        print('Orbital Optimisation: ', self.trueon(self.optdata['optimise_with_orbitals']), '(orbitals: %s)'
+        print('Orbital Optimisation:   ', self.trueon(self.optdata['optimise_with_orbitals']), '(orbitals: %s)'
               % [option['irrep'] for option in self.optdata['tracked_orbitals']])
         print('Total Gap Optimisation: ', self.trueon(self.optdata['optimise_with_total_gaps']), '(comparison folders: %s)'
               % [option['gap_folder_path'] for option in self.optdata['tracked_total_gaps']])
-        print('Seeded Optimisation: ', self.trueon(self.optdata['seeded_optimisation']), '(seeds: %s)'
+        print('Seeded Optimisation:    ', self.trueon(self.optdata['seeded_optimisation']), '(seeds: %s)'
               % self.optdata['initial_seed_number'])
-        print('Geometry Optimisation: ', self.trueon(self.optdata['optimise_pseudo_geometry']), '(carbons of type %s, indices: %s)'
+        print('Geometry Optimisation:  ', self.trueon(self.optdata['optimise_pseudo_geometry']), '(carbons of type %s, indices: %s)'
               % (self.optdata['pseudo_geometry_type'], self.optdata['pseudo_geometry']['indices_of_pseudo_carbons']))
-        print('Initial guesses: ', self.optdata['initial_guesses'])
+        print('Initial guesses:        ', self.optdata['initial_guesses'])
+        if not self.optdata['seeded_optimisation']:
+            print('WARNING: As seeded optimisation is OFF, you will need to supply your own initial guess '
+                  'for potential parameters.')
         print(self.line_separator)
 
     def print_references(self):

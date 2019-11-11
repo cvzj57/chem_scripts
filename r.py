@@ -45,7 +45,6 @@ class MatrixHandler:
                                          * self.apply_overlap_integral(b, b, orbital_type))
         return S
 
-
     def contract_matrix(self, coeff_list, matrix):
         # decide the contraction ratios needed.
         coefficient_matrix = numpy.zeros([len(matrix), len(coeff_list)])
@@ -70,6 +69,7 @@ class MatrixHandler:
         if contracted_operator_matrix is None:
             contracted_operator_matrix = contracted_overlap_matrix
 
+        # N(i,j) = S(i,j)/root(S(i,i)*S(j,j))
         normalised_matrix = numpy.zeros([len(contracted_overlap_matrix), len(contracted_overlap_matrix)])
         for i in range(len(contracted_overlap_matrix)):
             for j in range(len(contracted_overlap_matrix)):
