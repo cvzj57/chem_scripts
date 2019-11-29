@@ -126,7 +126,7 @@ class MOOInterface:
         pseudopotentials. 
         
         After this, you'll need to supply the ecp name and angular momentum of the potential to MOO using 
-        the 'Add ECP functions' option.
+        the 'Add ECP functions' option. This lets MOO find the ecp to optimise in the basis file.
         
         Next, you will need either to supply a starting coefficient and exponent for each ECP using the 'Set initial 
         guesses...' option, or use the semi-random seed options. When supplying initial guesses, bear in mind that 
@@ -210,7 +210,7 @@ class MOOInterface:
     def ecp_locator_menu(self):
         print(self.line_separator)
         print('OPTIMISATION: ECP LOCATORS')
-        print('Please specify ECPs for MOO to alter')
+        print('Please specify ECPs for MOO to optimise')
         print('ECP name (e.g. "c ecp-1"):')
         ecp_name = input(' >>  ')
         print('angular momentum (e.g. "p-f"):')
@@ -231,8 +231,8 @@ class MOOInterface:
         print('spin: (alpha, beta, closed)')
         spin = input(' >>  ')
         self.add_mo_criterion(irrep, ref_E, spin)
-        print('1. Add another ECP function.')
-        print('2. Done adding ECP functions.')
+        print('1. Add another MO criterion.')
+        print('2. Done adding MO criteria.')
         choice = input(" >>  ")
         self.exec_menu(choice, 'mo_criterion_menu')
 
@@ -244,8 +244,8 @@ class MOOInterface:
         print('reference total E gap (eV):')
         ref_E = float(input(' >>  '))
         self.add_total_gap_criterion(other_calc_folder, ref_E)
-        print('1. Add another ECP function.')
-        print('2. Done adding ECP functions.')
+        print('1. Add another Total E Gap criterion.')
+        print('2. Done adding Total E Gap criteria.')
         choice = input(" >>  ")
         self.exec_menu(choice, 'total_gap_criterion_menu')
 
