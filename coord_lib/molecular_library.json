@@ -1,0 +1,195 @@
+{
+  "alpha": [
+    {
+      "coord_file_name": "c2h4",
+      "atoms_to_potentialise": "1,2",
+      "total_es": 2
+    },
+    {
+      "coord_file_name": "c4h6",
+      "atoms_to_potentialise": "1-4",
+      "total_es": 4
+    },
+    {
+      "coord_file_name": "c6h8",
+      "atoms_to_potentialise": "1-6",
+      "total_es": 6
+    },
+    {
+      "coord_file_name": "c8h10",
+      "atoms_to_potentialise": "1-8",
+      "total_es": 8
+    },
+    {
+      "coord_file_name": "c10h12",
+      "atoms_to_potentialise": "1-10",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "c12h14",
+      "atoms_to_potentialise": "1-12",
+      "total_es": 12
+    },
+    {
+      "coord_file_name": "c20h22",
+      "atoms_to_potentialise": "1-20",
+      "total_es": 20
+    },
+    {
+      "coord_file_name": "c30h32",
+      "atoms_to_potentialise": "1-30",
+      "total_es": 30
+    },
+    {
+      "coord_file_name": "c40h42",
+      "atoms_to_potentialise": "1-40",
+      "total_es": 40
+    },
+    {
+      "coord_file_name": "c50h52",
+      "atoms_to_potentialise": "1-50",
+      "total_es": 50
+    },
+    {
+      "coord_file_name": "c100h102",
+      "atoms_to_potentialise": "1-100",
+      "total_es": 100
+    },
+    {
+      "coord_file_name": "rings1",
+      "atoms_to_potentialise": "1-6",
+      "total_es": 6
+    },
+    {
+      "coord_file_name": "rings2",
+      "atoms_to_potentialise": "1-10",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "rings3",
+      "atoms_to_potentialise": "1-14",
+      "total_es": 14
+    },
+    {
+      "coord_file_name": "rings4",
+      "atoms_to_potentialise": "1-16",
+      "total_es": 16
+    },
+    {
+      "coord_file_name": "rings6",
+      "atoms_to_potentialise": "1-24",
+      "total_es": 24
+    },
+    {
+      "coord_file_name": "rings19",
+      "atoms_to_potentialise": "1-54",
+      "total_es": 54
+    }
+  ],
+  "beta": [
+    {
+      "coord_file_name": "c2h4",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch2chnh2",
+      "atoms_to_potentialise": "1",
+      "total_es": 18
+    },
+    {
+      "coord_file_name": "ch2choh",
+      "atoms_to_potentialise": "1",
+      "total_es": 19
+    },
+    {
+      "coord_file_name": "ch2nh",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch2o",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    }
+  ],
+  "gamma": [
+    {
+      "coord_file_name": "c2h4o",
+      "atoms_to_potentialise": "3",
+      "total_es": 24
+    },
+    {
+      "coord_file_name": "c9h8o4",
+      "atoms_to_potentialise": "13",
+      "total_es": 86
+    },
+    {
+      "coord_file_name": "ch3ch3",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch3cooh",
+      "atoms_to_potentialise": "4",
+      "total_es": 24
+    },
+    {
+      "coord_file_name": "ch3nh2",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch3oh",
+      "atoms_to_potentialise": "1",
+      "total_es": 10
+    },
+    {
+      "coord_file_name": "ch4",
+      "atoms_to_potentialise": "1",
+      "total_es": 6
+    },
+    {
+      "coord_file_name": "claupch33",
+      "atoms_to_potentialise": "2-4",
+      "total_es": 54
+    }
+  ],
+  "delta": [
+    {
+      "coord_file_name": "c2h5nh2",
+      "atoms_to_potentialise": "2",
+      "total_es": 20
+    },
+    {
+      "coord_file_name": "c2h5oh",
+      "atoms_to_potentialise": "2",
+      "total_es": 20
+    },
+    {
+      "coord_file_name": "ch2fcooh",
+      "atoms_to_potentialise": "1",
+      "total_es": 34
+    },
+    {
+      "coord_file_name": "ch3ch2ch3",
+      "atoms_to_potentialise": "5",
+      "total_es": 20
+    },
+    {
+      "coord_file_name": "ch4",
+      "atoms_to_potentialise": "1",
+      "total_es": 4
+    },
+    {
+      "coord_file_name": "choch2cho",
+      "atoms_to_potentialise": "1",
+      "total_es": 32
+    },
+    {
+      "coord_file_name": "chonhch2cho",
+      "atoms_to_potentialise": "1",
+      "total_es": 40
+    }
+  ]
+}
